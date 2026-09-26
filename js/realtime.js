@@ -160,3 +160,10 @@ function isSongBanned(deezerId) {
   if (!deezerId) return false;
   return bannedSongs.some(b => b.deezer_id === deezerId);
 }
+
+// --- Utility: HTML escape ---
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}

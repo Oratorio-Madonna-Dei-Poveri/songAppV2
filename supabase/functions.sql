@@ -39,17 +39,28 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Modifica un brano (solo se session_id corrisponde)
+-- Modifica un brano (solo se session_id corrisponde) — sostituisce con un nuovo brano da Deezer
 CREATE OR REPLACE FUNCTION user_update_song(
   p_song_id UUID,
   p_session_id TEXT,
   p_title TEXT,
-  p_artist TEXT
+  p_artist TEXT,
+  p_genre TEXT DEFAULT NULL,
+  p_album_art_url TEXT DEFAULT NULL,
+  p_deezer_id TEXT DEFAULT NULL
 )
 RETURNS VOID AS $$
 BEGIN
+  -- Controlla se il nuovo brano è bannato
+  IF p_deezer_id IS NOT NULL AND EXISTS (
+    SELECT 1 FROM banned_songs WHERE deezer_id = p_deezer_id
+  ) THEN
+    RAISE EXCEPTION 'Questo brano è stato bannato e non può essere richiesto';
+  END IF;
+
   UPDATE playlist
-  SET title = p_title, artist = p_artist
+  SET title = p_title, artist = p_artist, genre = p_genre,
+      album_art_url = p_album_art_url, deezer_id = p_deezer_id
   WHERE id = p_song_id AND session_id = p_session_id;
 
   IF NOT FOUND THEN

@@ -98,9 +98,3 @@ function handleAddSong(button) {
   }
 }
 
-// HTML escape utility
-function escapeHtml(text) {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
-}
