@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MdP SongApp</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body data-page="user">
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div>
+        <h1>🎵 MdP SongApp</h1>
+        <p class="app-subtitle">Richiedi i tuoi brani preferiti</p>
+      </div>
+      <div class="header-right">
+        <div id="connection-status" class="connection-badge connecting">
+          <span class="dot"></span>
+          <span class="status-text">Connessione...</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Search Section -->
+    <section class="search-section">
+      <h2 class="section-title">Cerca un brano</h2>
+      <div class="search-input-wrapper">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="search-input" class="search-input" placeholder="Cerca titolo, artista..." autocomplete="off">
+      </div>
+      <div id="search-results" class="search-results"></div>
+    </section>
+
+    <!-- Playlist Section -->
+    <section class="playlist-section">
+      <div class="playlist-header">
+        <h2 class="section-title">Playlist</h2>
+        <span id="playlist-count" class="playlist-count">0</span>
+      </div>
+      <div id="playlist-list" class="playlist-list">
+        <div class="empty-state">
+          <div class="empty-icon">🎶</div>
+          <p>Nessun brano nella playlist</p>
+          <p>Cerca un brano e aggiungilo!</p>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Edit Modal -->
+  <div id="modal-overlay" class="modal-overlay">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Modifica brano</h3>
+        <button class="modal-close" onclick="closeModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="edit-song-id">
+        <div class="form-group">
+          <label for="edit-title">Titolo</label>
+          <input type="text" id="edit-title" placeholder="Titolo del brano">
+        </div>
+        <div class="form-group">
+          <label for="edit-artist">Artista</label>
+          <input type="text" id="edit-artist" placeholder="Nome dell'artista">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal()">Annulla</button>
+        <button class="btn btn-primary" onclick="saveEdit()">Salva</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="js/config.js?v=4"></script>
+  <script src="js/supabase-init.js?v=4"></script>
+  <script src="js/realtime.js?v=4"></script>
+  <script src="js/search.js?v=4"></script>
+  <script src="js/user.js?v=4"></script>
+</body>
+</html>

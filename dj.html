@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MdP SongApp — DJ</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body data-page="dj">
+  <div class="app-container">
+    <header class="app-header">
+      <div>
+        <h1>🎧 MdP SongApp</h1>
+        <p class="app-subtitle">Pannello DJ</p>
+      </div>
+      <div class="header-right">
+        <div id="connection-status" class="connection-badge connecting">
+          <span class="dot"></span>
+          <span class="status-text">Connessione...</span>
+        </div>
+      </div>
+    </header>
+
+    <section class="playlist-section">
+      <div class="playlist-header">
+        <h2 class="section-title">Playlist</h2>
+        <span id="playlist-count" class="playlist-count">0</span>
+      </div>
+      <div id="playlist-list" class="playlist-list">
+        <!-- Rendered by JS -->
+      </div>
+    </section>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+  <script src="js/config.js?v=4"></script>
+  <script src="js/supabase-init.js?v=4"></script>
+  <script src="js/realtime.js?v=4"></script>
+  <script src="js/dj.js?v=4"></script>
+</body>
+</html>

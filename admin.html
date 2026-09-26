@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MdP SongApp — Admin</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body data-page="admin">
+  <div class="app-container">
+    <header class="app-header">
+      <div>
+        <h1>⚙️ MdP SongApp</h1>
+        <p class="app-subtitle">Pannello Amministrazione</p>
+      </div>
+      <div class="header-right">
+        <div id="connection-status" class="connection-badge connecting">
+          <span class="dot"></span>
+          <span class="status-text">Connessione...</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Stats -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-value" id="stat-songs">0</div>
+        <div class="stat-label">Brani in playlist</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="stat-banned">0</div>
+        <div class="stat-label">Brani bannati</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="stat-online">0</div>
+        <div class="stat-label">Utenti online</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="stat-genres">0</div>
+        <div class="stat-label">Generi diversi</div>
+      </div>
+    </div>
+
+    <!-- Toolbar -->
+    <div class="admin-toolbar">
+      <button class="btn btn-danger" onclick="clearPlaylist()">🗑️ Svuota Playlist</button>
+      <button class="btn btn-success" onclick="exportCSV()">📥 Esporta CSV</button>
+    </div>
+
+    <!-- Search Section -->
+    <section class="search-section">
+      <h2 class="section-title">Aggiungi brano</h2>
+      <div class="search-input-wrapper">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="search-input" class="search-input" placeholder="Cerca titolo, artista..." autocomplete="off">
+      </div>
+      <div id="search-results" class="search-results"></div>
+    </section>
+
+    <!-- Playlist Section -->
+    <section class="playlist-section">
+      <div class="playlist-header">
+        <h2 class="section-title">Playlist completa</h2>
+        <span id="playlist-count" class="playlist-count">0</span>
+      </div>
+      <div id="playlist-list" class="playlist-list">
+        <!-- Rendered by JS -->
+      </div>
+    </section>
+
+    <!-- Banned Songs Section -->
+    <section class="banned-section">
+      <h2 class="section-title">🚫 Brani bannati</h2>
+      <div id="banned-list" class="banned-list">
+        <!-- Rendered by JS -->
+      </div>
+    </section>
+  </div>
+
+  <!-- Edit Modal -->
+  <div id="edit-modal-overlay" class="modal-overlay">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Modifica brano</h3>
+        <button class="modal-close" onclick="closeEditModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="edit-song-id">
+        <div class="form-group">
+          <label for="edit-title">Titolo</label>
+          <input type="text" id="edit-title" placeholder="Titolo del brano">
+        </div>
+        <div class="form-group">
+          <label for="edit-artist">Artista</label>
+          <input type="text" id="edit-artist" placeholder="Nome dell'artista">
+        </div>
+        <div class="form-group">
+          <label for="edit-genre">Genere</label>
+          <input type="text" id="edit-genre" placeholder="Genere musicale">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeEditModal()">Annulla</button>
+        <button class="btn btn-primary" onclick="saveAdminEdit()">Salva</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Ban Modal -->
+  <div id="ban-modal-overlay" class="modal-overlay">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>🚫 Banna brano</h3>
+        <button class="modal-close" onclick="closeBanModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="ban-song-title">
+        <input type="hidden" id="ban-song-artist">
+        <input type="hidden" id="ban-song-deezer-id">
+        <p id="ban-song-display" style="margin-bottom:1rem;font-weight:500;"></p>
+        <div class="form-group">
+          <label for="ban-reason">Motivo del ban (opzionale)</label>
+          <textarea id="ban-reason" placeholder="Inserisci un motivo..."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeBanModal()">Annulla</button>
+        <button class="btn btn-danger" onclick="confirmBan()">🚫 Banna</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+  <script src="js/config.js?v=4"></script>
+  <script src="js/supabase-init.js?v=4"></script>
+  <script src="js/realtime.js?v=4"></script>
+  <script src="js/search.js?v=4"></script>
+  <script src="js/admin.js?v=4"></script>
+</body>
+</html>
