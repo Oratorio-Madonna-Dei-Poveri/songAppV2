@@ -97,12 +97,20 @@ Lo script `schema.sql` include già i comandi SQL per aggiungere le tabelle alla
 ## 6. Accesso all'App
 Una volta pubblicata, potrai accedere alle seguenti pagine:
 - **Utente:** `https://USERNAME.github.io/NOME_REPO/index.html` (Questo è il link da condividere con il pubblico per richiedere le canzoni).
-- **DJ:** `https://USERNAME.github.io/NOME_REPO/dj.html` (Privato, per il DJ per gestire e riordinare i brani in coda).
-- **Admin:** `https://USERNAME.github.io/NOME_REPO/admin.html` (Privato, per gestire i brani, bannare canzoni o svuotare la playlist).
+- **Staff:** `https://USERNAME.github.io/NOME_REPO/staff.html` (Link riservato allo staff: inserisce le canzoni in cima sotto il blocco dello staff).
+- **DJ:** `https://USERNAME.github.io/NOME_REPO/dj.html` (Privato, per il DJ per gestire, vedere badge staff e riordinare i brani in coda).
+- **Admin:** `https://USERNAME.github.io/NOME_REPO/admin.html` (Privato, per gestire i brani, note private, ban, portale staff, statistiche e salute DB).
+
+## 7. Aggiornamento di un Database Esistente
+Se avevi già configurato Supabase in precedenza e vuoi attivare le nuove funzionalità (Staff, Note e Vitali del DB):
+1. Apri l'**SQL Editor** nella dashboard di Supabase.
+2. Apri il file locale `supabase/migration_staff_notes_vitals.sql`.
+3. Incolla il contenuto ed esegui la query premendo **Run**.
 
 ---
 
 ## Risoluzione Problemi (Troubleshooting)
 - **I brani non si caricano / errore di ricerca:** Assicurati che l'Edge Function sia stata deployata correttamente con il flag `--no-verify-jwt` e che l'URL in `js/config.js` sia corretto.
-- **Le canzoni non appaiono in tempo reale:** Controlla che Supabase Realtime sia attivato per le tabelle in Settings → Database → Replication.
-- **Permesso negato nel database:** Controlla di aver eseguito correttamente i file `schema.sql` e `functions.sql`. Tutte le policy RLS e i `SECURITY DEFINER` devono essere presenti.
+- **Le canzoni non appaiono in tempo reale:** Controlla che Supabase Realtime sia attivato per le tabelle in Settings → Database → Replication (tabelle: `playlist`, `banned_songs`, `app_settings`).
+- **Permesso negato nel database o errore svuota playlist:** Esegui lo script `supabase/migration_staff_notes_vitals.sql` per aggiornare le funzioni RPC con i corretti permessi e la clausola di sicurezza safeupdate.
+

@@ -38,19 +38,19 @@ function renderDJPlaylist(playlist) {
 
   container.innerHTML = activeSongs.map((song, index) => `
     <div class="playlist-item" data-id="${song.id}">
-      <span class="drag-handle" title="Trascina per riordinare">☰</span>
+      <span class="drag-handle" title="Trascina per riordinare">${ICONS.drag}</span>
       <span class="song-position">${index + 1}</span>
-      ${song.album_art_url
-        ? `<img class="song-artwork" src="${song.album_art_url}" alt="" loading="lazy">`
-        : '<div class="song-artwork" style="background:#333;display:flex;align-items:center;justify-content:center;font-size:1.2rem">🎵</div>'
-      }
+      ${renderSongArtwork(song.album_art_url)}
       <div class="song-info">
-        <div class="song-title">${escapeHtml(song.title)}</div>
+        <div class="song-title">
+          ${escapeHtml(song.title)}
+          ${renderStaffBadge(song.is_staff)}
+        </div>
         <div class="song-artist">${escapeHtml(song.artist)}</div>
       </div>
       <div class="song-actions">
-        <button class="btn btn-success btn-sm" onclick="markAsPlayed('${song.id}')">
-          ✅ Suonato
+        <button class="btn btn-success btn-sm" onclick="markAsPlayed('${song.id}')" title="Segna come suonato">
+          ${ICONS.check} Suonato
         </button>
       </div>
     </div>
@@ -101,11 +101,11 @@ async function saveNewOrder() {
 
     if (error) {
       showToast('Errore nel riordino', 'error');
-      await loadPlaylist(); // Resync
+      await loadPlaylist();
       return;
     }
 
-    // Update local positions
+    // Aggiorna posizioni visive locali
     items.forEach((item, index) => {
       const posEl = item.querySelector('.song-position');
       if (posEl) posEl.textContent = index + 1;
@@ -119,7 +119,7 @@ async function saveNewOrder() {
 }
 
 async function markAsPlayed(songId) {
-  // Optimistic UI update - hide instantly
+  // Aggiornamento ottimistico
   const item = document.querySelector(`.playlist-item[data-id="${songId}"]`);
   if (item) item.style.display = 'none';
 
@@ -129,7 +129,7 @@ async function markAsPlayed(songId) {
     });
 
     if (error) {
-      if (item) item.style.display = ''; // revert
+      if (item) item.style.display = '';
       showToast('Errore nella rimozione del brano', 'error');
       return;
     }
@@ -137,7 +137,7 @@ async function markAsPlayed(songId) {
     if (item) item.remove();
     showToast('Brano rimosso dalla playlist ✅', 'success');
   } catch (err) {
-    if (item) item.style.display = ''; // revert
+    if (item) item.style.display = '';
     showToast('Errore nella rimozione', 'error');
   }
 }

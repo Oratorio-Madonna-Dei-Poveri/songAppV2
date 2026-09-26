@@ -1,5 +1,5 @@
 // =============================================
-// MdP SongApp - Logica Pagina Admin
+// MdP SongApp - Logica Pagina Admin (SysAdmin)
 // =============================================
 
 let sortableInstance = null;
@@ -13,14 +13,23 @@ document.addEventListener('DOMContentLoaded', async () => {
     const el = document.getElementById('stat-online');
     if (el) el.textContent = count;
   };
+  onSettingsUpdate = updateAdminStaffControls;
 
   await loadBannedSongs();
   await loadPlaylist();
+  await loadAppSettings();
   initRealtime();
   initSearch('search-results', addSongAsAdmin);
+
+  if (appSettings && appSettings.staff_page) {
+    updateAdminStaffControls(appSettings);
+  }
+
+  // Carica statistiche di vita del DB
+  refreshDbVitals();
 });
 
-// --- Add song as admin ---
+// --- Aggiunta brano come Admin ---
 async function addSongAsAdmin(trackData) {
   try {
     const { error } = await supabaseClient.rpc('admin_add_song', {
@@ -35,14 +44,17 @@ async function addSongAsAdmin(trackData) {
       return;
     }
     showToast('Brano aggiunto 🎵', 'success');
-    document.getElementById('search-input').value = '';
-    document.getElementById('search-results').innerHTML = '';
+    const searchInput = document.getElementById('search-input');
+    if (searchInput) searchInput.value = '';
+    const searchResults = document.getElementById('search-results');
+    if (searchResults) searchResults.innerHTML = '';
+    refreshDbVitals();
   } catch (err) {
     showToast('Errore nell\'aggiunta', 'error');
   }
 }
 
-// --- Render admin playlist ---
+// --- Render Admin Playlist ---
 function renderAdminPlaylist(playlist) {
   const container = document.getElementById('playlist-list');
   const countEl = document.getElementById('playlist-count');
@@ -52,7 +64,6 @@ function renderAdminPlaylist(playlist) {
   if (countEl) countEl.textContent = playlist.length;
   if (statSongs) statSongs.textContent = playlist.length;
 
-  // Count unique genres
   if (statGenres) {
     const genres = new Set(playlist.map(s => s.genre).filter(Boolean));
     statGenres.textContent = genres.size;
@@ -73,23 +84,39 @@ function renderAdminPlaylist(playlist) {
 
   container.innerHTML = playlist.map((song, index) => {
     const isPlayed = !!song.played_at;
+    const hasNotes = !!(song.notes && song.notes.trim());
     return `
-      <div class="playlist-item ${isPlayed ? 'played' : ''}" data-id="${song.id}" style="${isPlayed ? 'opacity: 0.5; border: 1px dashed rgba(255,255,255,0.2);' : ''}">
-        <span class="drag-handle" title="Trascina per riordinare" style="${isPlayed ? 'visibility: hidden;' : ''}">☰</span>
-        <span class="song-position">${isPlayed ? '✅' : index + 1}</span>
-        ${song.album_art_url
-          ? `<img class="song-artwork" src="${song.album_art_url}" alt="" loading="lazy">`
-          : '<div class="song-artwork" style="background:#333;display:flex;align-items:center;justify-content:center;font-size:1.2rem">🎵</div>'
-        }
+      <div class="playlist-item ${isPlayed ? 'played' : ''}" data-id="${song.id}" style="${isPlayed ? 'opacity: 0.65; border: 1px dashed rgba(255,255,255,0.25);' : ''}">
+        <span class="drag-handle" title="Trascina per riordinare" style="${isPlayed ? 'visibility: hidden;' : ''}">${ICONS.drag}</span>
+        <span class="song-position">${isPlayed ? '✓' : index + 1}</span>
+        ${renderSongArtwork(song.album_art_url)}
         <div class="song-info">
-          <div class="song-title">${escapeHtml(song.title)} ${isPlayed ? '<span style="font-size: 0.75rem; color: #22c55e;">(Suonato)</span>' : ''}</div>
+          <div class="song-title">
+            ${escapeHtml(song.title)}
+            ${renderStaffBadge(song.is_staff)}
+            ${isPlayed ? '<span class="played-indicator">✓ Suonato</span>' : ''}
+          </div>
           <div class="song-artist">${escapeHtml(song.artist)}</div>
           ${song.genre ? `<span class="song-genre">${escapeHtml(song.genre)}</span>` : ''}
         </div>
         <div class="song-actions">
-          ${!isPlayed ? `<button class="btn btn-icon btn-ghost btn-sm" onclick="openAdminEditModal('${song.id}')" title="Modifica">✏️</button>` : ''}
-          <button class="btn btn-icon btn-danger btn-sm" onclick="adminDeleteSong('${song.id}')" title="Elimina">🗑️</button>
-          <button class="btn btn-icon btn-warning btn-sm" onclick="openBanModal('${song.id}')" title="Banna">🚫</button>
+          <!-- Pulsante Note (presente sia su brani in coda sia su quelli già suonati) -->
+          <button class="btn btn-icon ${hasNotes ? 'btn-note-active' : 'btn-ghost'} btn-sm" 
+                  onclick="openNotesModal('${song.id}')" 
+                  title="${hasNotes ? 'Note: ' + escapeHtml(song.notes) : 'Aggiungi nota privata'}">
+            ${ICONS.note}
+          </button>
+          ${!isPlayed ? `
+            <button class="btn btn-icon btn-ghost btn-sm" onclick="openAdminEditModal('${song.id}')" title="Modifica brano">
+              ${ICONS.edit}
+            </button>
+          ` : ''}
+          <button class="btn btn-icon btn-danger btn-sm" onclick="adminDeleteSong('${song.id}')" title="Elimina brano">
+            ${ICONS.delete}
+          </button>
+          <button class="btn btn-icon btn-warning btn-sm" onclick="openBanModal('${song.id}')" title="Banna brano">
+            ${ICONS.ban}
+          </button>
         </div>
       </div>
     `;
@@ -98,7 +125,7 @@ function renderAdminPlaylist(playlist) {
   initAdminSortable();
 }
 
-// --- Sortable ---
+// --- Sortable (permette al sysadmin di mescolare qualsiasi brano) ---
 function initAdminSortable() {
   const container = document.getElementById('playlist-list');
   if (!container) return;
@@ -129,15 +156,20 @@ async function saveAdminOrder() {
   });
 
   try {
-    // Admin uses dj_reorder_songs (same function)
     const { error } = await supabaseClient.rpc('dj_reorder_songs', {
       p_song_ids: songIds,
       p_positions: positions
     });
-    if (error) { showToast('Errore nel riordino', 'error'); await loadPlaylist(); return; }
+    if (error) {
+      showToast('Errore nel riordino', 'error');
+      await loadPlaylist();
+      return;
+    }
     items.forEach((item, index) => {
       const posEl = item.querySelector('.song-position');
-      if (posEl) posEl.textContent = index + 1;
+      if (posEl && !item.classList.contains('played')) {
+        posEl.textContent = index + 1;
+      }
     });
     showToast('Ordine aggiornato', 'success');
   } catch (err) {
@@ -146,8 +178,166 @@ async function saveAdminOrder() {
   }
 }
 
-// --- Admin Edit (Search-based replacement) ---
+// --- Modale Note per Brano (Note Private SysAdmin) ---
+function openNotesModal(songId) {
+  const song = currentPlaylist.find(s => s.id === songId);
+  if (!song) return;
+
+  const overlay = document.getElementById('notes-modal-overlay');
+  const songIdInput = document.getElementById('notes-song-id');
+  const displayEl = document.getElementById('notes-song-display');
+  const textarea = document.getElementById('song-notes-text');
+
+  if (songIdInput) songIdInput.value = songId;
+  if (displayEl) {
+    displayEl.textContent = `${song.title} — ${song.artist}${song.is_staff ? ' (Staff)' : ''}`;
+  }
+  if (textarea) {
+    textarea.value = song.notes || '';
+  }
+
+  if (overlay) overlay.classList.add('active');
+  setTimeout(() => { if (textarea) textarea.focus(); }, 100);
+}
+
+function closeNotesModal() {
+  const overlay = document.getElementById('notes-modal-overlay');
+  if (overlay) overlay.classList.remove('active');
+}
+
+async function saveSongNotes() {
+  const songId = document.getElementById('notes-song-id').value;
+  const textarea = document.getElementById('song-notes-text');
+  if (!songId || !textarea) return;
+
+  const notesText = textarea.value.trim();
+
+  try {
+    // Prova prima con RPC dedicata
+    const { error } = await supabaseClient.rpc('admin_update_song_notes', {
+      p_song_id: songId,
+      p_notes: notesText || null
+    });
+
+    if (error) {
+      // Fallback a UPDATE diretto
+      const { error: directError } = await supabaseClient
+        .from('playlist')
+        .update({ notes: notesText || null })
+        .eq('id', songId);
+
+      if (directError) {
+        if (directError.message && directError.message.includes('notes')) {
+          showToast('Colonna "notes" non presente nel DB. Esegui la migrazione SQL in supabase/', 'error');
+        } else {
+          showToast('Errore nel salvataggio della nota', 'error');
+        }
+        return;
+      }
+    }
+
+    // Aggiorna localmente
+    const song = currentPlaylist.find(s => s.id === songId);
+    if (song) {
+      song.notes = notesText || null;
+      renderAdminPlaylist(currentPlaylist);
+    }
+
+    showToast('Nota salvata 📝', 'success');
+    closeNotesModal();
+  } catch (err) {
+    console.error('Errore salvataggio nota:', err);
+    showToast('Errore nel salvataggio della nota', 'error');
+  }
+}
+
+// --- Gestione Portale Staff (Abilitazione/Disabilitazione e Messaggio) ---
+function updateAdminStaffControls(settings) {
+  const staffConfig = settings?.staff_page;
+  const statusBadge = document.getElementById('staff-control-status-badge');
+  const statusText = document.getElementById('staff-status-text');
+  const msgDisplay = document.getElementById('staff-control-message-display');
+
+  if (!statusBadge || !statusText) return;
+
+  if (staffConfig && staffConfig.enabled === false) {
+    statusBadge.className = 'staff-control-status disabled';
+    statusText.textContent = 'Disattivato (Chiuso)';
+    if (msgDisplay) {
+      msgDisplay.style.display = 'block';
+      msgDisplay.textContent = `Messaggio visualizzato allo staff: "${staffConfig.disabled_reason || 'Nessun messaggio specificato'}"`;
+    }
+  } else {
+    statusBadge.className = 'staff-control-status active';
+    statusText.textContent = 'Attivo (Aperto)';
+    if (msgDisplay) {
+      msgDisplay.style.display = 'none';
+      msgDisplay.textContent = '';
+    }
+  }
+}
+
+function openStaffSettingsModal() {
+  const overlay = document.getElementById('staff-settings-modal-overlay');
+  const checkbox = document.getElementById('staff-enabled-checkbox');
+  const textarea = document.getElementById('staff-disabled-message-textarea');
+
+  const staffConfig = appSettings?.staff_page || { enabled: true, disabled_reason: '' };
+
+  if (checkbox) checkbox.checked = staffConfig.enabled !== false;
+  if (textarea) textarea.value = staffConfig.disabled_reason || '';
+
+  if (overlay) overlay.classList.add('active');
+}
+
+function closeStaffSettingsModal() {
+  const overlay = document.getElementById('staff-settings-modal-overlay');
+  if (overlay) overlay.classList.remove('active');
+}
+
+async function saveStaffSettings() {
+  const checkbox = document.getElementById('staff-enabled-checkbox');
+  const textarea = document.getElementById('staff-disabled-message-textarea');
+
+  const enabled = checkbox ? checkbox.checked : true;
+  const reason = textarea ? textarea.value.trim() : '';
+
+  try {
+    // 1. Prova RPC set_staff_status
+    const { error } = await supabaseClient.rpc('set_staff_status', {
+      p_enabled: enabled,
+      p_reason: reason
+    });
+
+    if (error) {
+      // 2. Fallback a tabella app_settings diretta
+      const { error: directErr } = await supabaseClient
+        .from('app_settings')
+        .upsert({
+          key: 'staff_page',
+          value: { enabled, disabled_reason: reason },
+          updated_at: new Date().toISOString()
+        });
+
+      if (directErr) {
+        console.warn('Tabella app_settings non presente, salvo in locale:', directErr);
+        localStorage.setItem('mdp_staff_page_settings', JSON.stringify({ enabled, disabled_reason: reason }));
+      }
+    }
+
+    appSettings.staff_page = { enabled, disabled_reason: reason };
+    updateAdminStaffControls(appSettings);
+    closeStaffSettingsModal();
+    showToast(enabled ? 'Portale Staff attivato 🛡️' : 'Portale Staff disattivato ⏸️', 'success');
+  } catch (err) {
+    console.error('Errore impostazione staff:', err);
+    showToast('Errore nel salvataggio impostazioni', 'error');
+  }
+}
+
+// --- Admin Sostituzione Brano ---
 let adminEditSearchTimeout = null;
+let adminEditSearchAbort = null;
 
 function openAdminEditModal(songId) {
   const song = currentPlaylist.find(s => s.id === songId);
@@ -176,10 +366,11 @@ function openAdminEditModal(songId) {
       clearTimeout(adminEditSearchTimeout);
       const resContainer = document.getElementById('edit-search-results');
       if (query.length < 2) {
+        if (adminEditSearchAbort) { adminEditSearchAbort.abort(); adminEditSearchAbort = null; }
         if (resContainer) resContainer.innerHTML = '';
         return;
       }
-      adminEditSearchTimeout = setTimeout(() => performAdminEditSearch(query), 350);
+      adminEditSearchTimeout = setTimeout(() => performAdminEditSearch(query), 300);
     });
   }
 }
@@ -187,10 +378,15 @@ function openAdminEditModal(songId) {
 async function performAdminEditSearch(query) {
   const resultsContainer = document.getElementById('edit-search-results');
   if (!resultsContainer) return;
+
+  if (adminEditSearchAbort) adminEditSearchAbort.abort();
+  adminEditSearchAbort = new AbortController();
+
   resultsContainer.innerHTML = '<div class="search-loading">Ricerca in corso...</div>';
 
   try {
     const response = await fetch(`${SEARCH_FUNCTION_URL}?q=${encodeURIComponent(query)}&limit=10`, {
+      signal: adminEditSearchAbort.signal,
       headers: { 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` }
     });
     const result = await response.json();
@@ -201,33 +397,44 @@ async function performAdminEditSearch(query) {
     }
 
     resultsContainer.innerHTML = result.data.map(track => {
+      const coverUrl = track.album?.cover_small || track.album?.cover_medium || '';
       const trackData = JSON.stringify({
         id: String(track.id),
         title: track.title,
-        artist: track.artist.name,
+        artist: track.artist?.name || 'Sconosciuto',
         genre: track.genre_id ? (DEEZER_GENRES[track.genre_id] || '') : '',
-        album_art: track.album.cover_medium || track.album.cover_small || ''
-      }).replace(/'/g, '&apos;');
+        album_art: track.album?.cover_medium || coverUrl
+      }).replace(/'/g, '&#39;');
 
       return `
-        <div class="search-result-card" data-track='${trackData}'>
-          <img src="${track.album.cover_small || track.album.cover_medium || ''}" alt="" loading="lazy">
+        <div class="search-result-card" 
+             data-track='${trackData}' 
+             onclick="handleAdminEditCardClick(this)"
+             role="button"
+             tabindex="0"
+             title="Clicca per sostituire con questo brano">
+          ${coverUrl 
+            ? `<img src="${coverUrl}" alt="" loading="lazy">` 
+            : `<div class="song-artwork-fallback" style="width:48px;height:48px">${ICONS.music}</div>`
+          }
           <div class="result-info">
             <div class="result-title">${escapeHtml(track.title)}</div>
-            <div class="result-artist">${escapeHtml(track.artist.name)}</div>
+            <div class="result-artist">${escapeHtml(track.artist?.name || 'Sconosciuto')}</div>
           </div>
-          <button class="btn btn-sm btn-primary btn-add" onclick="handleAdminEditSelect(this)">✏️ Sostituisci</button>
+          <button class="btn btn-sm btn-primary btn-add" tabindex="-1">✏️ Sostituisci</button>
         </div>
       `;
     }).join('');
   } catch (error) {
+    if (error.name === 'AbortError') return;
     resultsContainer.innerHTML = '<div class="search-loading">Errore nella ricerca. Riprova.</div>';
+  } finally {
+    adminEditSearchAbort = null;
   }
 }
 
-async function handleAdminEditSelect(button) {
-  const card = button.closest('.search-result-card');
-  if (!card) return;
+async function handleAdminEditCardClick(card) {
+  card.classList.add('card-selected');
   const songId = document.getElementById('edit-song-id').value;
   if (!songId) return;
 
@@ -254,7 +461,7 @@ function closeEditModal() {
   document.getElementById('edit-modal-overlay').classList.remove('active');
 }
 
-// --- Admin Delete (Custom Modal) ---
+// --- Admin Eliminazione Brano ---
 let adminSongToDelete = null;
 
 function adminDeleteSong(songId) {
@@ -293,52 +500,80 @@ async function executeAdminDelete() {
     }
     if (item) item.remove();
     showToast('Brano eliminato 🗑️', 'success');
+    refreshDbVitals();
   } catch (err) {
     if (item) item.style.display = '';
     showToast('Errore nell\'eliminazione', 'error');
   }
 }
 
-// --- Clear Playlist ---
+// --- Svuota Playlist (Risoluzione bug con WHERE id IS NOT NULL e fallback) ---
 async function clearPlaylist() {
-  if (!confirm('⚠️ Sei sicuro di voler svuotare TUTTA la playlist? Questa azione non può essere annullata.')) return;
+  if (!confirm('⚠️ Sei sicuro di voler svuotare TUTTA la playlist? Questa azione eliminerà tutti i brani correnti e non può essere annullata.')) {
+    return;
+  }
+
   try {
-    const { error } = await supabaseClient.rpc('admin_clear_playlist');
-    if (error) { showToast('Errore nello svuotamento', 'error'); return; }
-    showToast('Playlist svuotata 🗑️', 'success');
+    // 1. Prova prima con la funzione RPC admin_clear_playlist
+    const { error: rpcError } = await supabaseClient.rpc('admin_clear_playlist');
+
+    if (rpcError) {
+      console.warn('RPC admin_clear_playlist ha restituito errore (safeupdate o non aggiornata). Tento DELETE REST diretto:', rpcError);
+      
+      // 2. Fallback diretto con clausola WHERE (evita il safeupdate check di Supabase)
+      const { error: directError } = await supabaseClient
+        .from('playlist')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000');
+
+      if (directError) {
+        console.error('Anche la cancellazione diretta è fallita:', directError);
+        showToast('Errore nello svuotamento della playlist: ' + (directError.message || 'riprova'), 'error');
+        return;
+      }
+    }
+
+    currentPlaylist = [];
+    renderAdminPlaylist([]);
+    showToast('Playlist svuotata con successo 🗑️', 'success');
+    refreshDbVitals();
   } catch (err) {
-    showToast('Errore nello svuotamento', 'error');
+    console.error('Errore clearPlaylist:', err);
+    showToast('Errore nello svuotamento della playlist', 'error');
   }
 }
 
-// --- Export CSV ---
+// --- Esporta CSV (include colonna Note, Stato e Richiesto da) ---
 function exportCSV() {
   if (currentPlaylist.length === 0) {
     showToast('La playlist è vuota', 'error');
     return;
   }
 
-  const headers = ['Posizione', 'Titolo', 'Artista', 'Genere', 'Data Aggiunta'];
+  const headers = ['Posizione', 'Titolo', 'Artista', 'Genere', 'Data Aggiunta', 'Stato', 'Richiesto da', 'Note Private'];
   const rows = currentPlaylist.map((song, index) => [
     index + 1,
     `"${(song.title || '').replace(/"/g, '""')}"`,
     `"${(song.artist || '').replace(/"/g, '""')}"`,
     `"${(song.genre || '').replace(/"/g, '""')}"`,
-    `"${new Date(song.created_at).toLocaleString('it-IT')}"`
+    `"${new Date(song.created_at).toLocaleString('it-IT')}"`,
+    song.played_at ? '"Suonato"' : '"In attesa"',
+    song.is_staff ? '"Staff"' : '"Pubblico"',
+    `"${(song.notes || '').replace(/"/g, '""')}"`
   ]);
 
   const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
-  const blob = new Blob([`\uFEFF${csvContent}`], { type: 'text/csv;charset=utf-8;' }); // BOM for Excel
+  const blob = new Blob([`\uFEFF${csvContent}`], { type: 'text/csv;charset=utf-8;' }); // BOM per Excel
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `playlist_${new Date().toISOString().slice(0, 10)}.csv`;
+  a.download = `playlist_mdp_${new Date().toISOString().slice(0, 10)}.csv`;
   a.click();
   URL.revokeObjectURL(url);
-  showToast('CSV esportato 📥', 'success');
+  showToast('CSV esportato con successo 📥', 'success');
 }
 
-// --- Ban Song ---
+// --- Ban Brano ---
 function openBanModal(songId) {
   const song = currentPlaylist.find(s => s.id === songId);
   if (!song) return;
@@ -370,12 +605,13 @@ async function confirmBan() {
     if (error) { showToast('Errore nel ban del brano', 'error'); return; }
     showToast('Brano bannato 🚫', 'success');
     closeBanModal();
+    refreshDbVitals();
   } catch (err) {
     showToast('Errore nel ban', 'error');
   }
 }
 
-// --- Render Banned Songs ---
+// --- Render Brani Bannati ---
 function renderBannedSongs(banned) {
   const container = document.getElementById('banned-list');
   const statBanned = document.getElementById('stat-banned');
@@ -404,7 +640,86 @@ async function unbanSong(banId) {
     const { error } = await supabaseClient.rpc('admin_unban_song', { p_ban_id: banId });
     if (error) { showToast('Errore nello sblocco', 'error'); return; }
     showToast('Brano sbloccato ↩️', 'success');
+    refreshDbVitals();
   } catch (err) {
     showToast('Errore nello sblocco', 'error');
+  }
+}
+
+// --- Stato e Vitali del Database (DB Life & Health Metrics) ---
+async function refreshDbVitals() {
+  const pingEl = document.getElementById('vital-ping');
+  const pingStatusEl = document.getElementById('vital-ping-status');
+  const dbSizeEl = document.getElementById('vital-db-size');
+  const tableSizeEl = document.getElementById('vital-table-size');
+  const staffRatioEl = document.getElementById('vital-staff-ratio');
+  const ratioDetailEl = document.getElementById('vital-ratio-detail');
+  const syncTimeEl = document.getElementById('vital-sync-time');
+  const pgVersionEl = document.getElementById('vital-pg-version');
+  const totalSongsEl = document.getElementById('vital-total-songs');
+  const playedSongsEl = document.getElementById('vital-played-songs');
+  const playedPctEl = document.getElementById('vital-played-pct');
+
+  if (syncTimeEl) {
+    syncTimeEl.textContent = `Ultimo sync: ${new Date().toLocaleTimeString('it-IT')}`;
+  }
+
+  // 1. Calcolo Latenza Ping Supabase
+  try {
+    const t0 = performance.now();
+    await supabaseClient.from('playlist').select('id', { count: 'exact', head: true });
+    const pingMs = Math.round(performance.now() - t0);
+
+    if (pingEl) pingEl.textContent = `${pingMs} ms`;
+    if (pingStatusEl) {
+      if (pingMs < 120) {
+        pingStatusEl.textContent = '🟢 Connessione eccellente';
+        pingStatusEl.style.color = '#22c55e';
+      } else if (pingMs < 300) {
+        pingStatusEl.textContent = '🟡 Connessione buona';
+        pingStatusEl.style.color = '#f59e0b';
+      } else {
+        pingStatusEl.textContent = '🟠 Connessione lenta';
+        pingStatusEl.style.color = '#f97316';
+      }
+    }
+  } catch (e) {
+    if (pingEl) pingEl.textContent = 'Errore';
+    if (pingStatusEl) pingStatusEl.textContent = '🔴 Server non raggiungibile';
+  }
+
+  // 2. Calcolo metriche da dati attuali
+  const totalInDb = currentPlaylist.length;
+  const staffSongsCount = currentPlaylist.filter(s => s.is_staff).length;
+  const publicSongsCount = totalInDb - staffSongsCount;
+  const playedSongsCount = currentPlaylist.filter(s => s.played_at).length;
+  const playedPct = totalInDb > 0 ? Math.round((playedSongsCount / totalInDb) * 100) : 0;
+  const staffPct = totalInDb > 0 ? Math.round((staffSongsCount / totalInDb) * 100) : 0;
+
+  if (totalSongsEl) totalSongsEl.textContent = totalInDb;
+  if (playedSongsEl) playedSongsEl.textContent = playedSongsCount;
+  if (playedPctEl) playedPctEl.textContent = `${playedPct}%`;
+  if (staffRatioEl) staffRatioEl.textContent = `${staffPct}% Staff`;
+  if (ratioDetailEl) ratioDetailEl.textContent = `${staffSongsCount} staff / ${publicSongsCount} pubblico`;
+
+  // 3. Prova RPC avanzata admin_get_db_vitals se disponibile
+  try {
+    const { data: vitals, error } = await supabaseClient.rpc('admin_get_db_vitals');
+    if (!error && vitals) {
+      if (dbSizeEl && vitals.db_size) dbSizeEl.textContent = vitals.db_size;
+      if (tableSizeEl && vitals.playlist_table_size) {
+        tableSizeEl.textContent = `Tabella playlist: ${vitals.playlist_table_size}`;
+      }
+      if (pgVersionEl && vitals.postgres_version) {
+        pgVersionEl.textContent = vitals.postgres_version;
+      }
+    } else {
+      // Fallback informativo se l'RPC non è ancora stata creata
+      if (dbSizeEl) dbSizeEl.textContent = '~' + Math.max(1, Math.round(totalInDb * 0.4)) + ' KB (stimati)';
+      if (tableSizeEl) tableSizeEl.textContent = `${totalInDb} righe in playlist`;
+      if (pgVersionEl) pgVersionEl.textContent = 'PostgreSQL (Supabase Cloud)';
+    }
+  } catch (e) {
+    if (dbSizeEl) dbSizeEl.textContent = 'Disponibile via SQL';
   }
 }

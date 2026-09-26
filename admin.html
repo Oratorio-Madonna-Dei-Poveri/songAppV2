@@ -5,16 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MdP SongApp — Admin</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/style.css?v=8">
 </head>
 <body data-page="admin">
   <div class="app-container">
     <header class="app-header">
       <div>
         <h1>⚙️ MdP SongApp</h1>
-        <p class="app-subtitle">Pannello Amministrazione</p>
+        <p class="app-subtitle">Pannello Amministrazione & Controllo</p>
       </div>
       <div class="header-right">
+        <span class="header-role-badge">⚙️ SysAdmin</span>
         <div id="connection-status" class="connection-badge connecting">
           <span class="dot"></span>
           <span class="status-text">Connessione...</span>
@@ -42,15 +43,31 @@
       </div>
     </div>
 
+    <!-- Staff Portal Control Card -->
+    <div class="admin-staff-control">
+      <div class="staff-control-info">
+        <div class="staff-control-title">🛡️ Portale Richieste Staff</div>
+        <div class="staff-control-status active" id="staff-control-status-badge">
+          <span class="status-dot"></span> <span id="staff-status-text">Attivo e Aperto</span>
+        </div>
+        <div class="staff-control-message" id="staff-control-message-display" style="display: none;"></div>
+      </div>
+      <div class="staff-control-actions">
+        <button class="btn btn-warning btn-sm" onclick="openStaffSettingsModal()">
+          ⚙️ Gestisci Portale Staff
+        </button>
+      </div>
+    </div>
+
     <!-- Toolbar -->
     <div class="admin-toolbar">
       <button class="btn btn-danger" onclick="clearPlaylist()">🗑️ Svuota Playlist</button>
-      <button class="btn btn-success" onclick="exportCSV()">📥 Esporta CSV</button>
+      <button class="btn btn-success" onclick="exportCSV()">📥 Esporta CSV (con Note)</button>
     </div>
 
     <!-- Search Section -->
     <section class="search-section">
-      <h2 class="section-title">Aggiungi brano</h2>
+      <h2 class="section-title">Aggiungi brano come Admin</h2>
       <div class="search-input-wrapper">
         <span class="search-icon">🔍</span>
         <input type="text" id="search-input" class="search-input" placeholder="Cerca titolo, artista..." autocomplete="off">
@@ -61,7 +78,7 @@
     <!-- Playlist Section -->
     <section class="playlist-section">
       <div class="playlist-header">
-        <h2 class="section-title">Playlist completa</h2>
+        <h2 class="section-title">Playlist completa (Trascina per riordinare)</h2>
         <span id="playlist-count" class="playlist-count">0</span>
       </div>
       <div id="playlist-list" class="playlist-list">
@@ -74,6 +91,55 @@
       <h2 class="section-title">🚫 Brani bannati</h2>
       <div id="banned-list" class="banned-list">
         <!-- Rendered by JS -->
+      </div>
+    </section>
+
+    <!-- DB Vitals & Health Section -->
+    <section class="db-vitals-section">
+      <div class="vitals-header">
+        <h2 class="section-title">🩺 Stato & Salute Database</h2>
+        <button class="btn btn-ghost btn-sm" onclick="refreshDbVitals()">🔄 Aggiorna metriche</button>
+      </div>
+      <div class="vitals-grid">
+        <div class="vital-card">
+          <div class="vital-top">
+            <span class="vital-icon">⚡</span>
+            <span class="vital-title">Latenza Supabase</span>
+          </div>
+          <div class="vital-value" id="vital-ping">-- ms</div>
+          <div class="vital-sub" id="vital-ping-status">Calcolo in corso...</div>
+        </div>
+        <div class="vital-card">
+          <div class="vital-top">
+            <span class="vital-icon">💾</span>
+            <span class="vital-title">Dimensione DB</span>
+          </div>
+          <div class="vital-value" id="vital-db-size">--</div>
+          <div class="vital-sub" id="vital-table-size">Tabella playlist: --</div>
+        </div>
+        <div class="vital-card">
+          <div class="vital-top">
+            <span class="vital-icon">📊</span>
+            <span class="vital-title">Staff vs Pubblico</span>
+          </div>
+          <div class="vital-value" id="vital-staff-ratio">0% Staff</div>
+          <div class="vital-sub" id="vital-ratio-detail">0 staff / 0 pubblico</div>
+        </div>
+        <div class="vital-card">
+          <div class="vital-top">
+            <span class="vital-icon">🕒</span>
+            <span class="vital-title">Attività & Uptime</span>
+          </div>
+          <div class="vital-value" id="vital-uptime">Online</div>
+          <div class="vital-sub" id="vital-sync-time">Ultimo sync: --</div>
+        </div>
+      </div>
+      <div class="vitals-info-bar">
+        <span>PostgreSQL: <strong id="vital-pg-version">Supabase Postgres 15+</strong></span>
+        <span>•</span>
+        <span>Totale brani: <strong id="vital-total-songs">0</strong></span>
+        <span>•</span>
+        <span>Suonati: <strong id="vital-played-songs">0</strong> (<span id="vital-played-pct">0%</span>)</span>
       </div>
     </section>
   </div>
@@ -89,7 +155,7 @@
         <input type="hidden" id="edit-song-id">
         <p id="edit-current-song" style="margin-bottom:1rem;color:rgba(255,255,255,0.7);font-size:0.85rem;"></p>
         <div class="form-group">
-          <label for="edit-search-input">Cerca il nuovo brano</label>
+          <label for="edit-search-input">Cerca il nuovo brano (clicca sul risultato per selezionarlo)</label>
           <input type="text" id="edit-search-input" class="search-input" placeholder="Cerca titolo, artista..." autocomplete="off">
         </div>
         <div id="edit-search-results" class="search-results" style="max-height:300px;"></div>
@@ -136,12 +202,60 @@
     </div>
   </div>
 
+  <!-- Song Notes Modal (Sysadmin Private Notes) -->
+  <div id="notes-modal-overlay" class="modal-overlay">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>📝 Note Private per il Brano</h3>
+        <button class="modal-close" onclick="closeNotesModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="notes-song-id">
+        <p id="notes-song-display" style="margin-bottom:1rem;font-weight:600;color:var(--text-primary);"></p>
+        <div class="form-group">
+          <label for="song-notes-text">Note (visibili solo ai sysadmin e nel CSV esportato):</label>
+          <textarea id="song-notes-text" rows="4" placeholder="Es. Dedicata a Marco per la maturità, richiesta urgente, cantata dal vivo..."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeNotesModal()">Annulla</button>
+        <button class="btn btn-primary" onclick="saveSongNotes()">💾 Salva Nota</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Staff Portal Settings Modal -->
+  <div id="staff-settings-modal-overlay" class="modal-overlay">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>🛡️ Configura Portale Staff</h3>
+        <button class="modal-close" onclick="closeStaffSettingsModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem;">
+          <label for="staff-enabled-checkbox" style="margin-bottom:0;font-weight:600;font-size:0.95rem;">
+            Abilita pagina richieste staff:
+          </label>
+          <input type="checkbox" id="staff-enabled-checkbox" style="width: 20px; height: 20px; accent-color: var(--primary); cursor: pointer;">
+        </div>
+        <div class="form-group">
+          <label for="staff-disabled-message-textarea">Messaggio se disattivata (spiega allo staff il motivo):</label>
+          <textarea id="staff-disabled-message-textarea" rows="3" placeholder="Es. Richieste brani momentaneamente chiuse per la cena. Riapriranno alle 22:30."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeStaffSettingsModal()">Annulla</button>
+        <button class="btn btn-primary" onclick="saveStaffSettings()">💾 Salva Impostazioni</button>
+      </div>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
-  <script src="js/config.js?v=7"></script>
-  <script src="js/supabase-init.js?v=7"></script>
-  <script src="js/realtime.js?v=7"></script>
-  <script src="js/search.js?v=7"></script>
-  <script src="js/admin.js?v=7"></script>
+  <script src="js/config.js?v=8"></script>
+  <script src="js/supabase-init.js?v=8"></script>
+  <script src="js/realtime.js?v=8"></script>
+  <script src="js/search.js?v=8"></script>
+  <script src="js/admin.js?v=8"></script>
 </body>
 </html>
