@@ -78,31 +78,24 @@
     </section>
   </div>
 
-  <!-- Edit Modal -->
+  <!-- Edit Modal (Deezer Search) -->
   <div id="edit-modal-overlay" class="modal-overlay">
     <div class="modal">
       <div class="modal-header">
-        <h3>Modifica brano</h3>
+        <h3>Sostituisci brano</h3>
         <button class="modal-close" onclick="closeEditModal()">&times;</button>
       </div>
       <div class="modal-body">
         <input type="hidden" id="edit-song-id">
+        <p id="edit-current-song" style="margin-bottom:1rem;color:rgba(255,255,255,0.7);font-size:0.85rem;"></p>
         <div class="form-group">
-          <label for="edit-title">Titolo</label>
-          <input type="text" id="edit-title" placeholder="Titolo del brano">
+          <label for="edit-search-input">Cerca il nuovo brano</label>
+          <input type="text" id="edit-search-input" class="search-input" placeholder="Cerca titolo, artista..." autocomplete="off">
         </div>
-        <div class="form-group">
-          <label for="edit-artist">Artista</label>
-          <input type="text" id="edit-artist" placeholder="Nome dell'artista">
-        </div>
-        <div class="form-group">
-          <label for="edit-genre">Genere</label>
-          <input type="text" id="edit-genre" placeholder="Genere musicale">
-        </div>
+        <div id="edit-search-results" class="search-results" style="max-height:300px;"></div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-ghost" onclick="closeEditModal()">Annulla</button>
-        <button class="btn btn-primary" onclick="saveAdminEdit()">Salva</button>
       </div>
     </div>
   </div>
@@ -133,10 +126,10 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
-  <script src="js/config.js?v=5"></script>
-  <script src="js/supabase-init.js?v=5"></script>
-  <script src="js/realtime.js?v=5"></script>
-  <script src="js/search.js?v=5"></script>
-  <script src="js/admin.js?v=5"></script>
+  <script src="js/config.js?v=6"></script>
+  <script src="js/supabase-init.js?v=6"></script>
+  <script src="js/realtime.js?v=6"></script>
+  <script src="js/search.js?v=6"></script>
+  <script src="js/admin.js?v=6"></script>
 </body>
 </html>
