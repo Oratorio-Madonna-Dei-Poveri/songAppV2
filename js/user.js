@@ -58,13 +58,15 @@ async function addSongToPlaylist(trackData) {
 
 // --- Render playlist ---
 function renderPlaylist(playlist) {
+  // Filtra i brani già suonati (non visibili agli utenti)
+  const activeSongs = playlist.filter(s => !s.played_at);
   const container = document.getElementById('playlist-list');
   const countEl = document.getElementById('playlist-count');
   if (!container) return;
 
-  if (countEl) countEl.textContent = playlist.length;
+  if (countEl) countEl.textContent = activeSongs.length;
 
-  if (playlist.length === 0) {
+  if (activeSongs.length === 0) {
     container.innerHTML = `
       <div class="empty-state">
         <div class="empty-icon">🎶</div>
@@ -75,7 +77,7 @@ function renderPlaylist(playlist) {
     return;
   }
 
-  container.innerHTML = playlist.map((song, index) => {
+  container.innerHTML = activeSongs.map((song, index) => {
     const isOwn = song.session_id === SESSION_ID;
     return `
       <div class="playlist-item ${isOwn ? 'own-song' : ''}" data-id="${song.id}">
@@ -235,9 +237,37 @@ function closeModal() {
   if (overlay) overlay.classList.remove('active');
 }
 
-// --- Delete song ---
-async function deleteSong(songId) {
-  if (!confirm('Sei sicuro di voler eliminare questo brano?')) return;
+// --- Delete song (Custom Modal) ---
+let songToDelete = null;
+
+function deleteSong(songId) {
+  songToDelete = songId;
+  const overlay = document.getElementById('confirm-modal-overlay');
+  if (overlay) overlay.classList.add('active');
+  
+  const confirmBtn = document.getElementById('confirm-delete-btn');
+  if (confirmBtn) {
+    // Rimuovi vecchi listener
+    const newBtn = confirmBtn.cloneNode(true);
+    confirmBtn.parentNode.replaceChild(newBtn, confirmBtn);
+    newBtn.addEventListener('click', executeDeleteSong);
+  }
+}
+
+function closeConfirmModal() {
+  songToDelete = null;
+  const overlay = document.getElementById('confirm-modal-overlay');
+  if (overlay) overlay.classList.remove('active');
+}
+
+async function executeDeleteSong() {
+  if (!songToDelete) return;
+  const songId = songToDelete;
+  closeConfirmModal();
+
+  // Optimistic UI update
+  const item = document.querySelector(`.playlist-item[data-id="${songId}"]`);
+  if (item) item.style.display = 'none';
 
   try {
     const { error } = await supabaseClient.rpc('user_delete_song', {
@@ -246,12 +276,15 @@ async function deleteSong(songId) {
     });
 
     if (error) {
+      if (item) item.style.display = ''; // revert
       showToast('Errore nell\'eliminazione del brano', 'error');
       return;
     }
 
+    if (item) item.remove();
     showToast('Brano eliminato 🗑️', 'success');
   } catch (err) {
+    if (item) item.style.display = ''; // revert
     showToast('Errore nell\'eliminazione', 'error');
   }
 }

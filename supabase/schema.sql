@@ -12,7 +12,8 @@ CREATE TABLE playlist (
   deezer_id TEXT,
   position INTEGER NOT NULL,
   session_id TEXT NOT NULL,
-  created_at TIMESTAMPTZ DEFAULT now()
+  created_at TIMESTAMPTZ DEFAULT now(),
+  played_at TIMESTAMPTZ DEFAULT NULL
 );
 
 -- Tabella brani bannati

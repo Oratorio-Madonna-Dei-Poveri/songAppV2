@@ -89,11 +89,11 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- FUNZIONI DJ
 -- ======================
 
--- DJ elimina un brano (qualsiasi)
+-- DJ segna un brano come suonato (non lo elimina, lo marca)
 CREATE OR REPLACE FUNCTION dj_delete_song(p_song_id UUID)
 RETURNS VOID AS $$
 BEGIN
-  DELETE FROM playlist WHERE id = p_song_id;
+  UPDATE playlist SET played_at = now() WHERE id = p_song_id;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
@@ -139,16 +139,19 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Admin modifica un brano (qualsiasi campo)
+-- Admin modifica un brano (sostituisce)
 CREATE OR REPLACE FUNCTION admin_update_song(
   p_song_id UUID,
   p_title TEXT,
   p_artist TEXT,
-  p_genre TEXT
+  p_genre TEXT DEFAULT NULL,
+  p_album_art_url TEXT DEFAULT NULL,
+  p_deezer_id TEXT DEFAULT NULL
 )
 RETURNS VOID AS $$
 BEGIN
-  UPDATE playlist SET title = p_title, artist = p_artist, genre = p_genre
+  UPDATE playlist SET title = p_title, artist = p_artist, genre = p_genre,
+                      album_art_url = p_album_art_url, deezer_id = p_deezer_id
   WHERE id = p_song_id;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;

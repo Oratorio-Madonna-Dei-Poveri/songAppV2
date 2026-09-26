@@ -14,13 +14,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 function renderDJPlaylist(playlist) {
+  const activeSongs = playlist.filter(s => !s.played_at);
   const container = document.getElementById('playlist-list');
   const countEl = document.getElementById('playlist-count');
   if (!container) return;
 
-  if (countEl) countEl.textContent = playlist.length;
+  if (countEl) countEl.textContent = activeSongs.length;
 
-  if (playlist.length === 0) {
+  if (activeSongs.length === 0) {
     container.innerHTML = `
       <div class="empty-state">
         <div class="empty-icon">🎶</div>
@@ -35,7 +36,7 @@ function renderDJPlaylist(playlist) {
     return;
   }
 
-  container.innerHTML = playlist.map((song, index) => `
+  container.innerHTML = activeSongs.map((song, index) => `
     <div class="playlist-item" data-id="${song.id}">
       <span class="drag-handle" title="Trascina per riordinare">☰</span>
       <span class="song-position">${index + 1}</span>
@@ -118,18 +119,25 @@ async function saveNewOrder() {
 }
 
 async function markAsPlayed(songId) {
+  // Optimistic UI update - hide instantly
+  const item = document.querySelector(`.playlist-item[data-id="${songId}"]`);
+  if (item) item.style.display = 'none';
+
   try {
     const { error } = await supabaseClient.rpc('dj_delete_song', {
       p_song_id: songId
     });
 
     if (error) {
+      if (item) item.style.display = ''; // revert
       showToast('Errore nella rimozione del brano', 'error');
       return;
     }
 
+    if (item) item.remove();
     showToast('Brano rimosso dalla playlist ✅', 'success');
   } catch (err) {
+    if (item) item.style.display = ''; // revert
     showToast('Errore nella rimozione', 'error');
   }
 }

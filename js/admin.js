@@ -71,26 +71,29 @@ function renderAdminPlaylist(playlist) {
     return;
   }
 
-  container.innerHTML = playlist.map((song, index) => `
-    <div class="playlist-item" data-id="${song.id}">
-      <span class="drag-handle" title="Trascina per riordinare">☰</span>
-      <span class="song-position">${index + 1}</span>
-      ${song.album_art_url
-        ? `<img class="song-artwork" src="${song.album_art_url}" alt="" loading="lazy">`
-        : '<div class="song-artwork" style="background:#333;display:flex;align-items:center;justify-content:center;font-size:1.2rem">🎵</div>'
-      }
-      <div class="song-info">
-        <div class="song-title">${escapeHtml(song.title)}</div>
-        <div class="song-artist">${escapeHtml(song.artist)}</div>
-        ${song.genre ? `<span class="song-genre">${escapeHtml(song.genre)}</span>` : ''}
+  container.innerHTML = playlist.map((song, index) => {
+    const isPlayed = !!song.played_at;
+    return `
+      <div class="playlist-item ${isPlayed ? 'played' : ''}" data-id="${song.id}" style="${isPlayed ? 'opacity: 0.5; border: 1px dashed rgba(255,255,255,0.2);' : ''}">
+        <span class="drag-handle" title="Trascina per riordinare" style="${isPlayed ? 'visibility: hidden;' : ''}">☰</span>
+        <span class="song-position">${isPlayed ? '✅' : index + 1}</span>
+        ${song.album_art_url
+          ? `<img class="song-artwork" src="${song.album_art_url}" alt="" loading="lazy">`
+          : '<div class="song-artwork" style="background:#333;display:flex;align-items:center;justify-content:center;font-size:1.2rem">🎵</div>'
+        }
+        <div class="song-info">
+          <div class="song-title">${escapeHtml(song.title)} ${isPlayed ? '<span style="font-size: 0.75rem; color: #22c55e;">(Suonato)</span>' : ''}</div>
+          <div class="song-artist">${escapeHtml(song.artist)}</div>
+          ${song.genre ? `<span class="song-genre">${escapeHtml(song.genre)}</span>` : ''}
+        </div>
+        <div class="song-actions">
+          ${!isPlayed ? `<button class="btn btn-icon btn-ghost btn-sm" onclick="openAdminEditModal('${song.id}')" title="Modifica">✏️</button>` : ''}
+          <button class="btn btn-icon btn-danger btn-sm" onclick="adminDeleteSong('${song.id}')" title="Elimina">🗑️</button>
+          <button class="btn btn-icon btn-warning btn-sm" onclick="openBanModal('${song.id}')" title="Banna">🚫</button>
+        </div>
       </div>
-      <div class="song-actions">
-        <button class="btn btn-icon btn-ghost btn-sm" onclick="openAdminEditModal('${song.id}')" title="Modifica">✏️</button>
-        <button class="btn btn-icon btn-danger btn-sm" onclick="adminDeleteSong('${song.id}')" title="Elimina">🗑️</button>
-        <button class="btn btn-icon btn-warning btn-sm" onclick="openBanModal('${song.id}')" title="Banna">🚫</button>
-      </div>
-    </div>
-  `).join('');
+    `;
+  }).join('');
 
   initAdminSortable();
 }
@@ -143,52 +146,155 @@ async function saveAdminOrder() {
   }
 }
 
-// --- Admin Edit ---
+// --- Admin Edit (Search-based replacement) ---
+let adminEditSearchTimeout = null;
+
 function openAdminEditModal(songId) {
   const song = currentPlaylist.find(s => s.id === songId);
   if (!song) return;
-  document.getElementById('edit-song-id').value = songId;
-  document.getElementById('edit-title').value = song.title;
-  document.getElementById('edit-artist').value = song.artist;
-  document.getElementById('edit-genre').value = song.genre || '';
-  document.getElementById('edit-modal-overlay').classList.add('active');
+
+  const overlay = document.getElementById('edit-modal-overlay');
+  const songIdInput = document.getElementById('edit-song-id');
+  const currentSongDisplay = document.getElementById('edit-current-song');
+  const searchInput = document.getElementById('edit-search-input');
+  const searchResults = document.getElementById('edit-search-results');
+
+  if (songIdInput) songIdInput.value = songId;
+  if (currentSongDisplay) currentSongDisplay.textContent = `Brano attuale: ${song.title} — ${song.artist}`;
+  if (searchInput) searchInput.value = '';
+  if (searchResults) searchResults.innerHTML = '';
+  if (overlay) overlay.classList.add('active');
+
+  setTimeout(() => { if (searchInput) searchInput.focus(); }, 100);
+
+  if (searchInput) {
+    const newInput = searchInput.cloneNode(true);
+    searchInput.parentNode.replaceChild(newInput, searchInput);
+
+    newInput.addEventListener('input', (e) => {
+      const query = e.target.value.trim();
+      clearTimeout(adminEditSearchTimeout);
+      const resContainer = document.getElementById('edit-search-results');
+      if (query.length < 2) {
+        if (resContainer) resContainer.innerHTML = '';
+        return;
+      }
+      adminEditSearchTimeout = setTimeout(() => performAdminEditSearch(query), 350);
+    });
+  }
+}
+
+async function performAdminEditSearch(query) {
+  const resultsContainer = document.getElementById('edit-search-results');
+  if (!resultsContainer) return;
+  resultsContainer.innerHTML = '<div class="search-loading">Ricerca in corso...</div>';
+
+  try {
+    const response = await fetch(`${SEARCH_FUNCTION_URL}?q=${encodeURIComponent(query)}&limit=10`, {
+      headers: { 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` }
+    });
+    const result = await response.json();
+
+    if (!result.data || result.data.length === 0) {
+      resultsContainer.innerHTML = '<div class="search-loading">Nessun risultato trovato</div>';
+      return;
+    }
+
+    resultsContainer.innerHTML = result.data.map(track => {
+      const trackData = JSON.stringify({
+        id: String(track.id),
+        title: track.title,
+        artist: track.artist.name,
+        genre: track.genre_id ? (DEEZER_GENRES[track.genre_id] || '') : '',
+        album_art: track.album.cover_medium || track.album.cover_small || ''
+      }).replace(/'/g, '&apos;');
+
+      return `
+        <div class="search-result-card" data-track='${trackData}'>
+          <img src="${track.album.cover_small || track.album.cover_medium || ''}" alt="" loading="lazy">
+          <div class="result-info">
+            <div class="result-title">${escapeHtml(track.title)}</div>
+            <div class="result-artist">${escapeHtml(track.artist.name)}</div>
+          </div>
+          <button class="btn btn-sm btn-primary btn-add" onclick="handleAdminEditSelect(this)">✏️ Sostituisci</button>
+        </div>
+      `;
+    }).join('');
+  } catch (error) {
+    resultsContainer.innerHTML = '<div class="search-loading">Errore nella ricerca. Riprova.</div>';
+  }
+}
+
+async function handleAdminEditSelect(button) {
+  const card = button.closest('.search-result-card');
+  if (!card) return;
+  const songId = document.getElementById('edit-song-id').value;
+  if (!songId) return;
+
+  try {
+    const trackData = JSON.parse(card.dataset.track);
+    const { error } = await supabaseClient.rpc('admin_update_song', {
+      p_song_id: songId,
+      p_title: trackData.title,
+      p_artist: trackData.artist,
+      p_genre: trackData.genre || null,
+      p_album_art_url: trackData.album_art || null,
+      p_deezer_id: trackData.id || null
+    });
+
+    if (error) { showToast('Errore nella sostituzione', 'error'); return; }
+    showToast('Brano sostituito ✏️', 'success');
+    closeEditModal();
+  } catch (err) {
+    showToast('Errore nella sostituzione', 'error');
+  }
 }
 
 function closeEditModal() {
   document.getElementById('edit-modal-overlay').classList.remove('active');
 }
 
-async function saveAdminEdit() {
-  const songId = document.getElementById('edit-song-id').value;
-  const title = document.getElementById('edit-title').value.trim();
-  const artist = document.getElementById('edit-artist').value.trim();
-  const genre = document.getElementById('edit-genre').value.trim();
+// --- Admin Delete (Custom Modal) ---
+let adminSongToDelete = null;
 
-  if (!title || !artist) { showToast('Titolo e artista sono obbligatori', 'error'); return; }
-
-  try {
-    const { error } = await supabaseClient.rpc('admin_update_song', {
-      p_song_id: songId,
-      p_title: title,
-      p_artist: artist,
-      p_genre: genre || null
-    });
-    if (error) { showToast('Errore nella modifica', 'error'); return; }
-    showToast('Brano modificato ✏️', 'success');
-    closeEditModal();
-  } catch (err) {
-    showToast('Errore nella modifica', 'error');
+function adminDeleteSong(songId) {
+  adminSongToDelete = songId;
+  const overlay = document.getElementById('confirm-modal-overlay');
+  if (overlay) overlay.classList.add('active');
+  
+  const confirmBtn = document.getElementById('admin-confirm-delete-btn');
+  if (confirmBtn) {
+    const newBtn = confirmBtn.cloneNode(true);
+    confirmBtn.parentNode.replaceChild(newBtn, confirmBtn);
+    newBtn.addEventListener('click', executeAdminDelete);
   }
 }
 
-// --- Admin Delete ---
-async function adminDeleteSong(songId) {
-  if (!confirm('Sei sicuro di voler eliminare questo brano?')) return;
+function closeAdminConfirmModal() {
+  adminSongToDelete = null;
+  const overlay = document.getElementById('confirm-modal-overlay');
+  if (overlay) overlay.classList.remove('active');
+}
+
+async function executeAdminDelete() {
+  if (!adminSongToDelete) return;
+  const songId = adminSongToDelete;
+  closeAdminConfirmModal();
+
+  const item = document.querySelector(`.playlist-item[data-id="${songId}"]`);
+  if (item) item.style.display = 'none';
+
   try {
     const { error } = await supabaseClient.rpc('admin_delete_song', { p_song_id: songId });
-    if (error) { showToast('Errore nell\'eliminazione', 'error'); return; }
+    if (error) { 
+      if (item) item.style.display = '';
+      showToast('Errore nell\'eliminazione', 'error'); 
+      return; 
+    }
+    if (item) item.remove();
     showToast('Brano eliminato 🗑️', 'success');
   } catch (err) {
+    if (item) item.style.display = '';
     showToast('Errore nell\'eliminazione', 'error');
   }
 }

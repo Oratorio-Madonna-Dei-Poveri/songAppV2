@@ -54,6 +54,18 @@
     </footer>
   </div>
 
+  <!-- Confirm Delete Modal -->
+  <div id="confirm-modal-overlay" class="modal-overlay">
+    <div class="modal" style="max-width: 350px; text-align: center;">
+      <h3 style="margin-bottom: 1rem; font-size: 1.2rem;">Elimina brano</h3>
+      <p style="margin-bottom: 1.5rem; color: rgba(255,255,255,0.7);">Sei sicuro di voler eliminare questo brano dalla playlist?</p>
+      <div style="display: flex; gap: 10px; justify-content: center;">
+        <button class="btn btn-ghost" onclick="closeConfirmModal()">Annulla</button>
+        <button class="btn btn-danger" id="confirm-delete-btn">Elimina</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Edit Modal (Deezer Search) -->
   <div id="modal-overlay" class="modal-overlay">
     <div class="modal">
@@ -78,10 +90,10 @@
 
   <!-- Scripts -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-  <script src="js/config.js?v=6"></script>
-  <script src="js/supabase-init.js?v=6"></script>
-  <script src="js/realtime.js?v=6"></script>
-  <script src="js/search.js?v=6"></script>
-  <script src="js/user.js?v=6"></script>
+  <script src="js/config.js?v=7"></script>
+  <script src="js/supabase-init.js?v=7"></script>
+  <script src="js/realtime.js?v=7"></script>
+  <script src="js/search.js?v=7"></script>
+  <script src="js/user.js?v=7"></script>
 </body>
 </html>
