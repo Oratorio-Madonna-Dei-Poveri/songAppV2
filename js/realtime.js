@@ -172,7 +172,27 @@ function initRealtime() {
 // canale realtime non risulta più "joined", lo ricreiamo da capo.
 let _visibilityResumeInProgress = false;
 
+// Guardie anti-corsa con l'inizializzazione iniziale della pagina.
+// BUG RISOLTO: "pageshow" viene generato dal browser anche al primissimo caricamento
+// della pagina (con persisted=false) e "focus" può scattare subito dopo il load. Senza
+// queste guardie, handleVisibilityResume() partiva PRIMA che la pagina avesse finito la
+// propria inizializzazione (initRealtime iniziale), ricreando i canali Realtime in corsa
+// con essa: il canale 'playlist-changes' risultava già sottoscritto quando la pagina
+// tentava di sottoscriverlo a sua volta, causando l'errore
+// "cannot add postgres_changes callbacks... after subscribe()" non gestito, che
+// interrompeva l'esecuzione dello script PRIMA che venisse chiamato initSearch() —
+// motivo per cui la ricerca dei brani smetteva di funzionare.
+let _appReady = false;
+let _pageWasHidden = false;
+
+window.addEventListener('load', () => { _appReady = true; });
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') _pageWasHidden = true;
+});
+
 async function handleVisibilityResume() {
+  if (!_appReady) return;
   if (document.visibilityState !== 'visible') return;
   if (_visibilityResumeInProgress) return;
   _visibilityResumeInProgress = true;
@@ -209,16 +229,28 @@ function reconnectRealtime() {
   initRealtime();
 }
 
-// Eventi che possono segnalare un ritorno in primo piano dopo una sospensione
-document.addEventListener('visibilitychange', handleVisibilityResume);
-window.addEventListener('pageshow', handleVisibilityResume);
-window.addEventListener('focus', handleVisibilityResume);
-window.addEventListener('online', handleVisibilityResume);
+// Eventi che possono segnalare un ritorno in primo piano dopo una sospensione.
+// "pageshow" e "focus" vengono ignorati se la pagina non è mai stata effettivamente
+// nascosta (o, per pageshow, se non proviene dalla bfcache), proprio per non scattare
+// al primo caricamento della pagina.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') handleVisibilityResume();
+});
+window.addEventListener('pageshow', (e) => {
+  if (e.persisted || _pageWasHidden) handleVisibilityResume();
+});
+window.addEventListener('focus', () => {
+  if (_pageWasHidden) handleVisibilityResume();
+});
+window.addEventListener('online', () => {
+  if (_appReady) handleVisibilityResume();
+});
 
 // Rete di sicurezza aggiuntiva: mentre la pagina è visibile, controlla periodicamente
 // che il canale sia ancora "joined". Serve a coprire casi limite in cui nessuno degli
 // eventi sopra viene generato dal browser/OS (es. alcuni WebView Android).
 setInterval(() => {
+  if (!_appReady) return;
   if (document.visibilityState !== 'visible') return;
   const playlistState = playlistChannel ? playlistChannel.state : 'closed';
   if (playlistState !== 'joined' && playlistState !== 'joining') {
