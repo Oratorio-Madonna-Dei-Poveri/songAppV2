@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MdP SongApp — Admin</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=10">
+  <link rel="stylesheet" href="css/style.css?v=11">
 </head>
 <body data-page="admin">
   <div class="app-container">
@@ -55,6 +55,22 @@
       <div class="staff-control-actions">
         <button class="btn btn-warning btn-sm" onclick="openStaffSettingsModal()">
           ⚙️ Gestisci Portale Staff
+        </button>
+      </div>
+    </div>
+
+    <!-- Maintenance Mode Control Card -->
+    <div class="admin-rate-limit-control">
+      <div class="staff-control-info">
+        <div class="staff-control-title">🛠️ Modalità Manutenzione</div>
+        <div class="staff-control-status disabled" id="maintenance-status-badge">
+          <span class="status-dot"></span> <span id="maintenance-status-text">Disattivata</span>
+        </div>
+        <div class="rate-limit-detail" id="maintenance-detail" style="display: none;"></div>
+      </div>
+      <div class="staff-control-actions">
+        <button class="btn btn-warning btn-sm" onclick="openMaintenanceModal()">
+          ⚙️ Configura Manutenzione
         </button>
       </div>
     </div>
@@ -289,6 +305,53 @@
     </div>
   </div>
 
+  <!-- Maintenance Mode Settings Modal -->
+  <div id="maintenance-modal-overlay" class="modal-overlay">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>🛠️ Configura Modalità Manutenzione</h3>
+        <button class="modal-close" onclick="closeMaintenanceModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem;">
+          <label for="mm-enabled-checkbox" style="margin-bottom:0;font-weight:600;font-size:0.95rem;">
+            Attiva modalità manutenzione (blocca sempre la pagina utente):
+          </label>
+          <input type="checkbox" id="mm-enabled-checkbox" style="width: 20px; height: 20px; accent-color: var(--primary); cursor: pointer;">
+        </div>
+
+        <div class="form-group" style="display: flex; align-items: center; justify-content: space-between;">
+          <label for="mm-block-staff-checkbox" style="margin-bottom:0;font-weight:500;">
+            Blocca anche la pagina Staff:
+          </label>
+          <input type="checkbox" id="mm-block-staff-checkbox" style="width: 18px; height: 18px; accent-color: var(--primary); cursor: pointer;">
+        </div>
+
+        <div class="form-group" style="display: flex; align-items: center; justify-content: space-between;">
+          <label for="mm-block-dj-checkbox" style="margin-bottom:0;font-weight:500;">
+            Blocca anche la pagina DJ:
+          </label>
+          <input type="checkbox" id="mm-block-dj-checkbox" style="width: 18px; height: 18px; accent-color: var(--primary); cursor: pointer;">
+        </div>
+
+        <div class="form-group">
+          <label for="mm-message-value">Messaggio mostrato agli utenti bloccati:</label>
+          <textarea id="mm-message-value" rows="3" style="width:100%;padding:10px 12px;border-radius:var(--radius-lg);background:var(--surface-2, #1a1a1a);color:var(--text-primary);border:1px solid var(--border);resize:vertical;">L'app è momentaneamente in manutenzione. Riprova più tardi.</textarea>
+        </div>
+
+        <p style="font-size:0.78rem;color:var(--text-muted);margin-top:0.5rem;">
+          La pagina Admin non viene mai bloccata. Le modifiche si applicano immediatamente
+          anche a chi ha già la pagina aperta, senza bisogno di ricaricare né di cambiare
+          branch su GitHub.
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeMaintenanceModal()">Annulla</button>
+        <button class="btn btn-primary" onclick="saveMaintenanceSettings()">💾 Salva Impostazioni</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Rate Limit Settings Modal -->
   <div id="rate-limit-modal-overlay" class="modal-overlay">
     <div class="modal">
@@ -382,10 +445,10 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
-  <script src="js/config.js?v=10"></script>
-  <script src="js/supabase-init.js?v=10"></script>
-  <script src="js/realtime.js?v=10"></script>
-  <script src="js/search.js?v=10"></script>
-  <script src="js/admin.js?v=10"></script>
+  <script src="js/config.js?v=11"></script>
+  <script src="js/supabase-init.js?v=11"></script>
+  <script src="js/realtime.js?v=11"></script>
+  <script src="js/search.js?v=11"></script>
+  <script src="js/admin.js?v=11"></script>
 </body>
 </html>

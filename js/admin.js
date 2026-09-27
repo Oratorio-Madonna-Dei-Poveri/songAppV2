@@ -338,6 +338,93 @@ function updateAllAdminControls(settings) {
   updateAdminStaffControls(settings);
   updateAdminRateLimitControls(settings);
   updateAdminPriorityControls(settings);
+  updateAdminMaintenanceControls(settings);
+}
+
+// --- Gestione Modalità Manutenzione ---
+function updateAdminMaintenanceControls(settings) {
+  const mm = settings?.maintenance_mode;
+  const statusBadge = document.getElementById('maintenance-status-badge');
+  const statusText = document.getElementById('maintenance-status-text');
+  const detail = document.getElementById('maintenance-detail');
+  if (!statusBadge || !statusText) return;
+
+  const enabled = !!(mm && mm.enabled === true);
+
+  if (enabled) {
+    statusBadge.className = 'staff-control-status active';
+    statusText.textContent = 'Attiva';
+    const parts = ['pagina utente bloccata'];
+    if (mm.block_staff) parts.push('Staff bloccata');
+    if (mm.block_dj) parts.push('DJ bloccata');
+    if (detail) {
+      detail.style.display = 'block';
+      detail.textContent = parts.join(' • ');
+    }
+  } else {
+    statusBadge.className = 'staff-control-status disabled';
+    statusText.textContent = 'Disattivata';
+    if (detail) { detail.style.display = 'none'; detail.textContent = ''; }
+  }
+}
+
+function openMaintenanceModal() {
+  const mm = appSettings?.maintenance_mode || {};
+  const enabledCb = document.getElementById('mm-enabled-checkbox');
+  const blockStaffCb = document.getElementById('mm-block-staff-checkbox');
+  const blockDjCb = document.getElementById('mm-block-dj-checkbox');
+  const messageVal = document.getElementById('mm-message-value');
+
+  if (enabledCb) enabledCb.checked = !!mm.enabled;
+  if (blockStaffCb) blockStaffCb.checked = !!mm.block_staff;
+  if (blockDjCb) blockDjCb.checked = !!mm.block_dj;
+  if (messageVal) messageVal.value = mm.message || "L'app è momentaneamente in manutenzione. Riprova più tardi.";
+
+  const overlay = document.getElementById('maintenance-modal-overlay');
+  if (overlay) overlay.classList.add('active');
+}
+
+function closeMaintenanceModal() {
+  const overlay = document.getElementById('maintenance-modal-overlay');
+  if (overlay) overlay.classList.remove('active');
+}
+
+async function saveMaintenanceSettings() {
+  const enabled = document.getElementById('mm-enabled-checkbox')?.checked || false;
+  const blockStaff = document.getElementById('mm-block-staff-checkbox')?.checked || false;
+  const blockDj = document.getElementById('mm-block-dj-checkbox')?.checked || false;
+  const message = document.getElementById('mm-message-value')?.value?.trim() ||
+    "L'app è momentaneamente in manutenzione. Riprova più tardi.";
+
+  try {
+    const { error } = await supabaseClient.rpc('admin_set_maintenance_mode', {
+      p_enabled: enabled,
+      p_block_staff: blockStaff,
+      p_block_dj: blockDj,
+      p_message: message
+    });
+
+    const newValue = { enabled, block_staff: blockStaff, block_dj: blockDj, message };
+
+    if (error) {
+      console.warn('RPC admin_set_maintenance_mode non disponibile, fallback diretto:', error);
+      const { error: directErr } = await supabaseClient
+        .from('app_settings')
+        .upsert({ key: 'maintenance_mode', value: newValue, updated_at: new Date().toISOString() });
+      if (directErr) {
+        showToast('Errore nel salvataggio della modalità manutenzione', 'error');
+        return;
+      }
+    }
+
+    appSettings.maintenance_mode = newValue;
+    updateAdminMaintenanceControls(appSettings);
+    closeMaintenanceModal();
+    showToast(enabled ? 'Modalità manutenzione attivata 🛠️' : 'Modalità manutenzione disattivata', 'success');
+  } catch (err) {
+    console.error('Errore impostazione modalità manutenzione:', err);
+    showToast('Errore nel salvataggio della modalità manutenzione', 'error');
+  }
 }
 
 // --- Gestione Rate Limit Richieste Utenti ---

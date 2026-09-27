@@ -77,6 +77,13 @@ INSERT INTO app_settings (key, value)
 VALUES ('priority_algo', '{"enabled": true, "mode": "block", "ratio": 3}'::jsonb)
 ON CONFLICT (key) DO NOTHING;
 
+-- Modalità manutenzione (disattivata di default). Se attivata, blocca sempre la pagina
+-- utente; le pagine Staff/DJ sono bloccate solo se richiesto esplicitamente. La pagina
+-- Admin non viene mai bloccata.
+INSERT INTO app_settings (key, value)
+VALUES ('maintenance_mode', '{"enabled": false, "block_staff": false, "block_dj": false, "message": "L''app è momentaneamente in manutenzione. Riprova più tardi."}'::jsonb)
+ON CONFLICT (key) DO NOTHING;
+
 -- Abilita Realtime sulle tabelle
 ALTER PUBLICATION supabase_realtime ADD TABLE playlist;
 ALTER PUBLICATION supabase_realtime ADD TABLE banned_songs;

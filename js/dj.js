@@ -9,6 +9,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   onPlaylistUpdate = renderDJPlaylist;
 
+  // Necessario anche qui per conoscere subito lo stato della modalità manutenzione
+  // (impostazione "Blocca anche la pagina DJ") già al primo caricamento della pagina.
+  await loadAppSettings();
   await loadPlaylist();
   initRealtime();
 });
