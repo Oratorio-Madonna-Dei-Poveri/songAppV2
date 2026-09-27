@@ -3,19 +3,20 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MdP SongApp</title>
+  <title>MdP SongApp — Staff</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css?v=8">
 </head>
-<body data-page="user">
+<body data-page="staff">
   <div class="app-container">
     <!-- Header -->
     <header class="app-header">
       <div>
         <h1>🎵 MdP SongApp</h1>
-        <p class="app-subtitle">Richiedi i tuoi brani preferiti</p>
+        <p class="app-subtitle">Richieste brani — Area Staff</p>
       </div>
       <div class="header-right">
+        <span class="header-role-badge">🛡️ Staff</span>
         <div id="connection-status" class="connection-badge connecting">
           <span class="dot"></span>
           <span class="status-text">Connessione...</span>
@@ -23,9 +24,16 @@
       </div>
     </header>
 
+    <!-- Staff Disabled Banner (shown when admin disables the staff portal) -->
+    <div id="staff-disabled-banner" class="staff-disabled-banner" style="display: none;">
+      <div class="disabled-icon">⏸️</div>
+      <h3>Portale Staff Momentaneamente Sospeso</h3>
+      <p id="staff-disabled-reason">Le richieste brani per lo staff non sono attualmente disponibili.</p>
+    </div>
+
     <!-- Search Section -->
-    <section class="search-section">
-      <h2 class="section-title">Cerca un brano</h2>
+    <section class="search-section" id="staff-search-section">
+      <h2 class="section-title">Cerca un brano per lo Staff</h2>
       <div class="search-input-wrapper">
         <span class="search-icon">🔍</span>
         <input type="text" id="search-input" class="search-input" placeholder="Cerca titolo, artista..." autocomplete="off">
@@ -36,14 +44,14 @@
     <!-- Playlist Section -->
     <section class="playlist-section">
       <div class="playlist-header">
-        <h2 class="section-title">Playlist</h2>
+        <h2 class="section-title">Playlist attuale</h2>
         <span id="playlist-count" class="playlist-count">0</span>
       </div>
       <div id="playlist-list" class="playlist-list">
         <div class="empty-state">
           <div class="empty-icon">🎶</div>
           <p>Nessun brano nella playlist</p>
-          <p>Cerca un brano e aggiungilo!</p>
+          <p>Cerca un brano e aggiungilo come Staff!</p>
         </div>
       </div>
     </section>
@@ -120,6 +128,6 @@
   <script src="js/supabase-init.js?v=8"></script>
   <script src="js/realtime.js?v=8"></script>
   <script src="js/search.js?v=8"></script>
-  <script src="js/user.js?v=8"></script>
+  <script src="js/staff.js?v=8"></script>
 </body>
 </html>

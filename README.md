@@ -1,18 +1,19 @@
 # MdP SongApp
 
-**MdP SongApp** è una web application leggera progettata per consentire agli utenti di richiedere brani musicali durante un evento, fornendo al DJ un'interfaccia dedicata per gestire la coda in tempo reale e all'amministratore strumenti di controllo avanzati.
-
-## Screenshot / Mockup
-*(Inserire screenshot dell'interfaccia utente qui)*
-*(Inserire screenshot dell'interfaccia DJ qui)*
-*(Inserire screenshot dell'interfaccia Admin qui)*
+**MdP SongApp** è una web application leggera progettata per consentire agli utenti e allo staff di richiedere brani musicali durante eventi e feste dell'Oratorio, fornendo al DJ un'interfaccia dedicata per gestire la coda in tempo reale e all'amministratore strumenti di controllo e monitoraggio avanzati.
 
 ## Architettura
 Il progetto utilizza un'architettura completamente serverless e gratuita (entro i limiti del free tier):
 - **Frontend:** HTML, CSS, Vanilla JavaScript (nessun framework pesante, caricamento ultra-veloce).
 - **Hosting:** GitHub Pages (Gratuito, distribuzione globale).
 - **Backend / Database:** Supabase (PostgreSQL, Realtime, Edge Functions).
-- **Integrazione Dati:** Deezer API (Ricerca brani proxyata in modo sicuro tramite Supabase Edge Function).
+- **Integrazione Dati:** Deezer API (Proxy tramite Supabase Edge Function con caching e abort controller).
+
+## Pagine e Sezioni
+- **`index.html` (Utenti):** Ricerca brani da Deezer, aggiunta con click diretto, eliminazione/sostituzione brani personali, pop-up Crediti ✦Sirio.
+- **`staff.html` (Staff):** Vista simile a quella degli utenti con inserimento prioritario sotto il blocco brani dello staff. Abilitabile/disabilitabile dall'admin con messaggio motivazionale.
+- **`dj.html` (DJ Console):** Gestione scaletta brani in tempo reale, drag & drop per riordinare, visualizzazione indicatore brani dello Staff, marcatura brani come suonati.
+- **`admin.html` (SysAdmin):** Statistiche in tempo reale, note private per ogni brano (in coda e suonati), svuotamento playlist, ban brani, gestione portale staff, export CSV completo, monitoraggio salute e vitali del DB (latenza, dimensioni, PostgreSQL).
 
 ## Struttura dei File
 ```text
@@ -20,11 +21,22 @@ Il progetto utilizza un'architettura completamente serverless e gratuita (entro 
 ├── admin.html             # Interfaccia di amministrazione
 ├── dj.html                # Interfaccia di gestione per il DJ
 ├── index.html             # Interfaccia utente per richiedere brani
+├── staff.html             # Interfaccia riservata alle richieste dello staff
+├── css/
+│   └── style.css          # Foglio di stile principale (Dark theme, icone SVG, responsive)
 ├── js/
-│   └── config.js          # Configurazione di Supabase (URL e chiavi API)
+│   ├── admin.js           # Logica pannello amministratore e metriche DB
+│   ├── config.js          # Configurazione di Supabase (URL e chiavi API)
+│   ├── dj.js              # Logica console DJ
+│   ├── realtime.js        # Modulo Supabase Realtime, icone SVG e presenza
+│   ├── search.js          # Modulo ricerca Deezer con caching e AbortController
+│   ├── staff.js           # Logica portale staff e algoritmo a blocchi
+│   ├── supabase-init.js   # Inizializzazione client Supabase e session ID
+│   └── user.js            # Logica interfaccia utente
 ├── supabase/
-│   ├── schema.sql         # Struttura del database, tabelle e policy RLS
-│   ├── functions.sql      # Funzioni RPC per il database
+│   ├── schema.sql         # Schema database completo
+│   ├── functions.sql      # Funzioni RPC complete
+│   ├── migration_staff_notes_vitals.sql  # Script migrazione rapido per aggiornare un DB esistente
 │   └── functions/
 │       └── search-songs/  # Edge function per la ricerca brani su Deezer
 │           └── index.ts
@@ -33,25 +45,11 @@ Il progetto utilizza un'architettura completamente serverless e gratuita (entro 
 ```
 
 ## Setup Rapido
-Per configurare il progetto per il tuo evento, devi:
-1. Creare un database Supabase.
-2. Eseguire gli script SQL per la creazione del database.
-3. Configurare e pubblicare l'Edge Function.
-4. Ospitare il sito su GitHub Pages.
+Per configurare il progetto per il tuo evento:
+1. Crea un database Supabase.
+2. Esegui gli script SQL nel SQL Editor di Supabase (`schema.sql` e `functions.sql`, o `migration_staff_notes_vitals.sql` se hai già il DB creato).
+3. Configura le credenziali in `js/config.js`.
+4. Deploy dell'Edge Function di ricerca (`supabase functions deploy search-songs --no-verify-jwt`).
+5. Pubblica il sito su GitHub Pages.
 
 Per le istruzioni dettagliate passo-passo in italiano, consulta il file **[setup-guide.md](./setup-guide.md)**.
-
-## Tecnologie Utilizzate
-- HTML5, CSS3, JavaScript (ES6+)
-- Supabase (Auth, Database, Realtime, Edge Functions, RPC)
-- Deno (Per l'Edge Function)
-- API di Deezer
-
-## Limiti Free Tier Supabase
-Questo progetto è ottimizzato per funzionare fluidamente all'interno del Free Tier di Supabase, che attualmente offre:
-- 500MB di spazio database
-- 2GB di larghezza di banda mensile
-- 2 milioni di richieste Edge Function al mese
-- Fino a 200 connessioni Realtime simultanee
-
-Questi limiti sono più che sufficienti per eventi, feste o serate. Per evitare il blocco del progetto in periodi prolungati di inutilizzo, ricordati di metterlo in pausa o di interagire periodicamente con il database.
