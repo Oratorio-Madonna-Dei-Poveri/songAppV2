@@ -473,6 +473,29 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+-- Admin imposta la modalità manutenzione (opzionale, tweakable in tempo reale).
+-- I client leggono questa riga tramite Realtime (tabella app_settings) e mostrano
+-- subito l'overlay di blocco, anche se già connessi da tempo. La pagina Admin non
+-- viene mai bloccata (lo verifica il client in base a document.body.dataset.page).
+CREATE OR REPLACE FUNCTION admin_set_maintenance_mode(
+  p_enabled BOOLEAN,
+  p_block_staff BOOLEAN DEFAULT FALSE,
+  p_block_dj BOOLEAN DEFAULT FALSE,
+  p_message TEXT DEFAULT NULL
+)
+RETURNS VOID AS $$
+BEGIN
+  INSERT INTO app_settings (key, value, updated_at)
+  VALUES ('maintenance_mode', jsonb_build_object(
+    'enabled', p_enabled,
+    'block_staff', p_block_staff,
+    'block_dj', p_block_dj,
+    'message', COALESCE(NULLIF(p_message, ''), 'L''app è momentaneamente in manutenzione. Riprova più tardi.')
+  ), now())
+  ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now();
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 -- Admin ottiene metriche di salute e statistiche del Database
 CREATE OR REPLACE FUNCTION admin_get_db_vitals()
 RETURNS JSONB AS $$

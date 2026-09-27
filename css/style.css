@@ -1300,6 +1300,41 @@ textarea:-webkit-autofill:active{
   letter-spacing: 0.02em;
 }
 
+/* --- Modalità Manutenzione (overlay a schermo intero) --- */
+.maintenance-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: #0f0f13;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  text-align: center;
+}
+
+.maintenance-box {
+  max-width: 420px;
+}
+
+.maintenance-box .maintenance-icon {
+  font-size: 3rem;
+  margin-bottom: 0.75rem;
+}
+
+.maintenance-box h2 {
+  font-size: 1.3rem;
+  margin: 0 0 0.75rem;
+  color: var(--text-primary, #f2f2f5);
+}
+
+.maintenance-box p {
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: var(--text-muted, #b7b7c2);
+  margin: 0;
+}
+
 /* --- Rate limit info banner (pagina utente) --- */
 .rate-limit-banner {
   background: rgba(139, 92, 246, 0.10);

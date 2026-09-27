@@ -49,7 +49,13 @@ let appSettings = {
     cooldown_minutes_enabled: false,
     cooldown_minutes: 15
   },
-  priority_algo: { enabled: true, mode: 'block', ratio: 3 }
+  priority_algo: { enabled: true, mode: 'block', ratio: 3 },
+  maintenance_mode: {
+    enabled: false,
+    block_staff: false,
+    block_dj: false,
+    message: "L'app è momentaneamente in manutenzione. Riprova più tardi."
+  }
 };
 let isConnected = false;
 
@@ -108,18 +114,44 @@ async function loadAppSettings() {
         try { appSettings.staff_page = JSON.parse(cached); } catch(e) {}
       }
     }
-    if (onSettingsUpdate) onSettingsUpdate(appSettings);
+    notifySettingsUpdate();
   } catch (e) {
     console.warn('Errore lettura app_settings (potrebbe mancare la tabella):', e);
   }
   return appSettings;
 }
 
+// Punto unico di notifica per ogni aggiornamento di app_settings (sia al caricamento
+// iniziale sia via Realtime). Applica sempre la modalità manutenzione (component
+// condiviso, indipendente dalla pagina) e poi, se presente, avvisa anche il gestore
+// specifico della pagina già impostato in onSettingsUpdate (es. banner rate limit,
+// stato portale staff, pannelli admin), senza sostituirlo.
+function notifySettingsUpdate() {
+  applyMaintenanceMode(appSettings);
+  if (onSettingsUpdate) onSettingsUpdate(appSettings);
+}
+
 // --- Real-time subscriptions ---
 let playlistChannel = null;
 let presenceChannel = null;
 
+// initRealtime() è VOLUTAMENTE idempotente: rimuove sempre prima ogni canale già
+// esistente (se presente) e ne crea uno nuovo da zero. Così può essere richiamata in
+// sicurezza più volte — sia dal normale avvio della pagina sia dal ripristino dopo
+// sospensione (schermo spento) — senza mai tentare di aggiungere listener
+// "postgres_changes" a un canale già sottoscritto (che genererebbe l'errore
+// "cannot add postgres_changes callbacks... after subscribe()" e bloccherebbe
+// l'esecuzione dello script, impedendo anche l'inizializzazione della ricerca).
 function initRealtime() {
+  if (playlistChannel) {
+    try { supabaseClient.removeChannel(playlistChannel); } catch (e) { /* ignora */ }
+    playlistChannel = null;
+  }
+  if (presenceChannel) {
+    try { supabaseClient.removeChannel(presenceChannel); } catch (e) { /* ignora */ }
+    presenceChannel = null;
+  }
+
   // Canale Realtime modifiche DB
   playlistChannel = supabaseClient
     .channel('playlist-changes')
@@ -132,7 +164,7 @@ function initRealtime() {
     .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings' }, (payload) => {
       if (payload.new && payload.new.key) {
         appSettings[payload.new.key] = payload.new.value;
-        if (onSettingsUpdate) onSettingsUpdate(appSettings);
+        notifySettingsUpdate();
       }
     })
     .subscribe((status) => {
@@ -369,23 +401,22 @@ function ensureCreditsModal() {
           <button class="modal-close" onclick="closeCreditsModal()">&times;</button>
         </div>
         <div class="modal-body" style="padding: 1.2rem 0.5rem;">
-          <div style="font-size: 2.2rem; margin-bottom: 0.75rem;">🎵</div>
+          <div style="font-size: 2.2rem; margin-bottom: 0.75rem;">🎵 SongApp</div>
           <p style="font-size: 1.05rem; font-weight: 500; line-height: 1.6; color: rgba(255, 255, 255, 0.9); margin-bottom: 1.2rem;">
             MdP SongApp è realizzata dagli animatori per l'Oratorio.
           </p>
           <p style="font-size: 1.05rem; font-weight: 500; line-height: 1.6; color: rgba(255, 255, 255, 0.9); margin-bottom: 1.2rem;">
-            Codice: Daniele Prevedi
-            Beta Test: Simone Bortolotti, Francesco Russo
+            Realizzato con l'ausilio di strumenti di Intelligenza Artificiale. Nessun dato personale viene preso/utilizzato durante l'utilizzo.
           </p>
           <p style="font-size: 1.05rem; font-weight: 500; line-height: 1.6; color: rgba(255, 255, 255, 0.9); margin-bottom: 1.2rem;">
-            Realizzato con l'ausilio di strumenti di Intelligenza Artificiale. Tutti i dati NON vengono trattati esternamente alla struttura necessaria. Nessun dato personale è utilizzato.
+            Codice: Daniele P. <br> Beta Test: Simone B., Francesco R. <br> Idea di: Francesco R.
           </p>
-          <p style="font-size: 0.85rem; font-weight: 500; line-height: 1.6; color: rgba(255, 255, 255, 0.75); margin-bottom: 1.2rem;">
-            © Oratorio Madonna dei Poveri 2026. Tutti i diritti riservati.
+          <p style="font-size: 0.75rem; font-weight: 500; line-height: 1.6; color: rgba(255, 255, 255, 0.75); margin-bottom: 1.2rem;">
+            © 2026 Oratorio Madonna dei Poveri. Tutti i diritti riservati.
           </p>
-          <div class="credits-product-tag">
+          <!-- <div class="credits-product-tag">
             Un prodotto ✦Sirio
-          </div>
+          </div> -->
         </div>
         <div class="modal-footer" style="justify-content: center;">
           <button class="btn btn-primary" onclick="closeCreditsModal()">Chiudi</button>
@@ -428,3 +459,54 @@ function ensureCreditsFooterLink() {
 }
 
 document.addEventListener('DOMContentLoaded', ensureCreditsFooterLink);
+
+// =============================================
+// Componente "Modalità Manutenzione" (condiviso da tutte le pagine)
+// =============================================
+// Legge app_settings.maintenance_mode (aggiornato in tempo reale) e, se attivo per la
+// pagina corrente, mostra un overlay a schermo intero che blocca l'accesso — istantaneo
+// anche per chi ha già la pagina aperta, senza bisogno di ricaricare. La pagina admin
+// non viene mai bloccata, qualunque sia l'impostazione.
+const MAINTENANCE_OVERLAY_ID = 'maintenance-overlay';
+
+function applyMaintenanceMode(settings) {
+  const page = document.body.dataset.page;
+  if (page === 'admin') return; // il pannello admin resta sempre accessibile
+
+  const mm = settings?.maintenance_mode;
+  const enabled = !!(mm && mm.enabled === true);
+
+  const shouldBlock = enabled && (
+    page === 'user' ||
+    (page === 'staff' && mm.block_staff === true) ||
+    (page === 'dj' && mm.block_dj === true)
+  );
+
+  let overlay = document.getElementById(MAINTENANCE_OVERLAY_ID);
+
+  if (!shouldBlock) {
+    if (overlay) overlay.style.display = 'none';
+    return;
+  }
+
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = MAINTENANCE_OVERLAY_ID;
+    overlay.className = 'maintenance-overlay';
+    overlay.innerHTML = `
+      <div class="maintenance-box">
+        <div class="maintenance-icon">🛠️</div>
+        <h2>Manutenzione in corso</h2>
+        <p id="maintenance-message"></p>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+  }
+
+  const msgEl = overlay.querySelector('#maintenance-message');
+  if (msgEl) {
+    msgEl.textContent = (mm && mm.message) ||
+      "L'app è momentaneamente in manutenzione. Riprova più tardi.";
+  }
+  overlay.style.display = 'flex';
+}
