@@ -397,17 +397,26 @@ function ensureCreditsModal() {
     <div id="${CREDITS_MODAL_ID}" class="modal-overlay">
       <div class="modal credits-modal" style="max-width: 400px; text-align: center;">
         <div class="modal-header">
-          <h3>✦ Crediti</h3>
+          <h3>Crediti</h3>
           <button class="modal-close" onclick="closeCreditsModal()">&times;</button>
         </div>
         <div class="modal-body" style="padding: 1.2rem 0.5rem;">
-          <div style="font-size: 2.2rem; margin-bottom: 0.75rem;">🎵</div>
+          <div style="font-size: 2.2rem; margin-bottom: 0.75rem;">🎵 SongApp</div>
           <p style="font-size: 1.05rem; font-weight: 500; line-height: 1.6; color: rgba(255, 255, 255, 0.9); margin-bottom: 1.2rem;">
             MdP SongApp è realizzata dagli animatori per l'Oratorio.
           </p>
-          <div class="credits-product-tag">
+          <p style="font-size: 1.05rem; font-weight: 500; line-height: 1.6; color: rgba(255, 255, 255, 0.9); margin-bottom: 1.2rem;">
+            Realizzato con l'ausilio di strumenti di Intelligenza Artificiale. Nessun dato personale viene preso/utilizzato durante l'utilizzo.
+          </p>
+          <p style="font-size: 1.05rem; font-weight: 500; line-height: 1.6; color: rgba(255, 255, 255, 0.9); margin-bottom: 1.2rem;">
+            Codice: Daniele P. <br> Beta Test: Simone B., Francesco R. <br> Idea di: Francesco R.
+          </p>
+          <p style="font-size: 0.75rem; font-weight: 500; line-height: 1.6; color: rgba(255, 255, 255, 0.75); margin-bottom: 1.2rem;">
+            © 2026 Oratorio Madonna dei Poveri. Tutti i diritti riservati.
+          </p>
+          <!-- <div class="credits-product-tag">
             Un prodotto ✦Sirio
-          </div>
+          </div> -->
         </div>
         <div class="modal-footer" style="justify-content: center;">
           <button class="btn btn-primary" onclick="closeCreditsModal()">Chiudi</button>
