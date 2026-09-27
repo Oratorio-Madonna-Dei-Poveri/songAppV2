@@ -6,7 +6,8 @@
 -- FUNZIONI UTENTE
 -- ======================
 
--- Aggiunge un brano alla playlist (controlla se bannato, inserisce in coda con is_staff = FALSE)
+-- Aggiunge un brano alla playlist (controlla se bannato, applica il rate limit se attivo,
+-- inserisce in coda con is_staff = FALSE)
 CREATE OR REPLACE FUNCTION user_add_song(
   p_title TEXT,
   p_artist TEXT,
@@ -19,12 +20,67 @@ RETURNS UUID AS $$
 DECLARE
   v_max_pos INTEGER;
   v_new_id UUID;
+  v_rl JSONB;
+  v_active_count INTEGER;
+  v_max_tracks INTEGER;
+  v_cooldown_min INTEGER;
+  v_last_created TIMESTAMPTZ;
+  v_wait_seconds INTEGER;
+  v_wait_label TEXT;
 BEGIN
   -- Controlla se il brano è bannato
   IF p_deezer_id IS NOT NULL AND EXISTS (
     SELECT 1 FROM banned_songs WHERE deezer_id = p_deezer_id
   ) THEN
     RAISE EXCEPTION 'Questo brano è stato bannato e non può essere richiesto';
+  END IF;
+
+  -- ======================
+  -- RATE LIMIT (opzionale, configurabile dall'admin in tempo reale)
+  -- ======================
+  -- Importante: le impostazioni vengono lette QUI, ad ogni chiamata, direttamente
+  -- dalla tabella app_settings. Questo garantisce che una modifica fatta dall'admin
+  -- si applichi immediatamente alla richiesta successiva di QUALSIASI client, anche
+  -- se quel client è connesso da ore e non ha mai ricaricato la pagina. Le richieste
+  -- già soddisfatte in passato non vengono in alcun modo toccate (non è retroattivo).
+  SELECT value INTO v_rl FROM app_settings WHERE key = 'rate_limit';
+
+  IF v_rl IS NOT NULL AND COALESCE((v_rl->>'enabled')::boolean, false) = true THEN
+
+    -- Limite: numero massimo di brani "attivi" (non ancora suonati) per sessione
+    IF COALESCE((v_rl->>'max_active_tracks_enabled')::boolean, false) = true THEN
+      v_max_tracks := COALESCE((v_rl->>'max_active_tracks')::integer, 0);
+      SELECT COUNT(*) INTO v_active_count FROM playlist
+        WHERE session_id = p_session_id AND played_at IS NULL;
+
+      IF v_max_tracks > 0 AND v_active_count >= v_max_tracks THEN
+        RAISE EXCEPTION 'Hai già % brani in coda (limite massimo: %). Attendi che vengano suonati prima di aggiungerne altri.',
+          v_active_count, v_max_tracks;
+      END IF;
+    END IF;
+
+    -- Limite: tempo minimo di attesa tra una richiesta e la successiva
+    IF COALESCE((v_rl->>'cooldown_minutes_enabled')::boolean, false) = true THEN
+      v_cooldown_min := COALESCE((v_rl->>'cooldown_minutes')::integer, 0);
+      IF v_cooldown_min > 0 THEN
+        SELECT MAX(created_at) INTO v_last_created FROM playlist
+          WHERE session_id = p_session_id;
+
+        IF v_last_created IS NOT NULL AND v_last_created + (v_cooldown_min || ' minutes')::interval > now() THEN
+          v_wait_seconds := GREATEST(1, CEIL(EXTRACT(EPOCH FROM
+            ((v_last_created + (v_cooldown_min || ' minutes')::interval) - now())
+          ))::integer);
+
+          v_wait_label := CASE
+            WHEN v_wait_seconds >= 60 THEN CEIL(v_wait_seconds / 60.0)::text || ' minuti'
+            ELSE v_wait_seconds::text || ' secondi'
+          END;
+
+          RAISE EXCEPTION 'Devi attendere ancora circa % prima di poter richiedere un altro brano.', v_wait_label;
+        END IF;
+      END IF;
+    END IF;
+
   END IF;
 
   -- Calcola la prossima posizione
@@ -89,7 +145,23 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- FUNZIONI STAFF
 -- ======================
 
--- Staff aggiunge un brano: lo inserisce subito sotto il primo blocco di brani selezionati dallo staff
+-- Staff aggiunge un brano. La posizione in cui viene inserito dipende dall'algoritmo di
+-- priorità scelto dall'admin (impostazione 'priority_algo' in app_settings), letto in
+-- tempo reale ad ogni chiamata — così un cambio di algoritmo si applica subito alla
+-- richiesta successiva, senza bisogno che nessuno ricarichi la pagina.
+--
+-- Modalità supportate:
+--  - 'off'   : nessuna priorità, il brano va semplicemente in fondo alla coda (FIFO),
+--              esattamente come una richiesta pubblica (resta comunque marcato is_staff
+--              per il badge e le note dell'admin).
+--  - 'top'   : il brano va sempre in cima alla coda attiva (massima priorità assoluta).
+--  - 'block' : (default, comportamento storico) il brano viene inserito subito sotto il
+--              primo blocco contiguo di brani staff già in cima alla coda.
+--  - 'ratio' : "un brano staff ogni N brani pubblici". Si scorre la coda dall'inizio
+--              contando i brani pubblici consecutivi dall'ultimo brano staff incontrato;
+--              appena il conteggio raggiunge N, il nuovo brano staff viene inserito lì.
+--              Se in coda non ci sono ancora N brani pubblici consecutivi, il brano va
+--              in fondo (evita di "bruciare" priorità quando non ancora necessaria).
 CREATE OR REPLACE FUNCTION staff_add_song(
   p_title TEXT,
   p_artist TEXT,
@@ -104,6 +176,11 @@ DECLARE
   v_insert_pos INTEGER;
   v_rec RECORD;
   v_found_break BOOLEAN := FALSE;
+  v_pa JSONB;
+  v_mode TEXT := 'block';
+  v_ratio INTEGER := 3;
+  v_public_counter INTEGER := 0;
+  v_candidate INTEGER;
 BEGIN
   -- Controlla se il brano è bannato
   IF p_deezer_id IS NOT NULL AND EXISTS (
@@ -112,39 +189,85 @@ BEGIN
     RAISE EXCEPTION 'Questo brano è stato bannato e non può essere richiesto';
   END IF;
 
-  v_insert_pos := NULL;
-
-  -- Scorre i brani attivi (non ancora suonati) in ordine di posizione
-  FOR v_rec IN 
-    SELECT id, position, is_staff 
-    FROM playlist 
-    WHERE played_at IS NULL 
-    ORDER BY position ASC, created_at ASC
-  LOOP
-    IF COALESCE(v_rec.is_staff, FALSE) = TRUE AND NOT v_found_break THEN
-      -- Fa parte del blocco staff iniziale contiguo
-      v_insert_pos := v_rec.position + 1;
-    ELSE
-      -- Trovato il primo brano non-staff o già oltre il blocco
-      IF NOT v_found_break THEN
-        v_found_break := TRUE;
-        -- Se il primo brano attivo non era staff, il blocco iniziale ha dimensione 0
-        IF v_insert_pos IS NULL THEN
-          v_insert_pos := v_rec.position;
-        END IF;
-      END IF;
+  -- Legge l'algoritmo di priorità corrente
+  SELECT value INTO v_pa FROM app_settings WHERE key = 'priority_algo';
+  IF v_pa IS NOT NULL THEN
+    v_mode := COALESCE(v_pa->>'mode', 'block');
+    v_ratio := COALESCE((v_pa->>'ratio')::integer, 3);
+    IF COALESCE((v_pa->>'enabled')::boolean, true) = false THEN
+      v_mode := 'off';
     END IF;
-  END LOOP;
-
-  -- Se non ci sono brani attivi nella playlist
-  IF v_insert_pos IS NULL THEN
-    SELECT COALESCE(MAX(position), 0) + 1 INTO v_insert_pos FROM playlist;
   END IF;
 
-  -- Scala di 1 la posizione di tutti i brani successivi o uguali alla posizione scelta
-  UPDATE playlist 
-  SET position = position + 1 
-  WHERE position >= v_insert_pos;
+  IF v_ratio IS NULL OR v_ratio < 1 THEN
+    v_ratio := 1;
+  END IF;
+
+  IF v_mode = 'off' THEN
+    -- Nessuna priorità: semplice append in fondo, come un utente normale
+    SELECT COALESCE(MAX(position), 0) + 1 INTO v_insert_pos FROM playlist;
+
+  ELSIF v_mode = 'top' THEN
+    -- Sempre in cima alla coda attiva
+    SELECT MIN(position) INTO v_insert_pos FROM playlist WHERE played_at IS NULL;
+    IF v_insert_pos IS NULL THEN
+      SELECT COALESCE(MAX(position), 0) + 1 INTO v_insert_pos FROM playlist;
+    ELSE
+      UPDATE playlist SET position = position + 1 WHERE position >= v_insert_pos;
+    END IF;
+
+  ELSIF v_mode = 'ratio' THEN
+    v_candidate := NULL;
+    FOR v_rec IN
+      SELECT id, position, is_staff FROM playlist
+      WHERE played_at IS NULL
+      ORDER BY position ASC, created_at ASC
+    LOOP
+      IF COALESCE(v_rec.is_staff, FALSE) = TRUE THEN
+        v_public_counter := 0;
+      ELSE
+        v_public_counter := v_public_counter + 1;
+        IF v_public_counter >= v_ratio AND v_candidate IS NULL THEN
+          v_candidate := v_rec.position + 1;
+        END IF;
+      END IF;
+    END LOOP;
+
+    IF v_candidate IS NOT NULL THEN
+      v_insert_pos := v_candidate;
+      UPDATE playlist SET position = position + 1 WHERE position >= v_insert_pos;
+    ELSE
+      SELECT COALESCE(MAX(position), 0) + 1 INTO v_insert_pos FROM playlist;
+    END IF;
+
+  ELSE
+    -- 'block' (comportamento storico/default)
+    v_insert_pos := NULL;
+
+    FOR v_rec IN
+      SELECT id, position, is_staff
+      FROM playlist
+      WHERE played_at IS NULL
+      ORDER BY position ASC, created_at ASC
+    LOOP
+      IF COALESCE(v_rec.is_staff, FALSE) = TRUE AND NOT v_found_break THEN
+        v_insert_pos := v_rec.position + 1;
+      ELSE
+        IF NOT v_found_break THEN
+          v_found_break := TRUE;
+          IF v_insert_pos IS NULL THEN
+            v_insert_pos := v_rec.position;
+          END IF;
+        END IF;
+      END IF;
+    END LOOP;
+
+    IF v_insert_pos IS NULL THEN
+      SELECT COALESCE(MAX(position), 0) + 1 INTO v_insert_pos FROM playlist;
+    ELSE
+      UPDATE playlist SET position = position + 1 WHERE position >= v_insert_pos;
+    END IF;
+  END IF;
 
   -- Inserisci il brano con flag is_staff = TRUE
   INSERT INTO playlist (
@@ -296,6 +419,56 @@ RETURNS VOID AS $$
 BEGIN
   INSERT INTO app_settings (key, value, updated_at)
   VALUES ('staff_page', jsonb_build_object('enabled', p_enabled, 'disabled_reason', p_reason), now())
+  ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now();
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Admin imposta il rate limit delle richieste utente (opzionale, tweakable in tempo reale).
+-- I client leggono questa riga tramite Realtime (tabella app_settings) per mostrare subito
+-- il messaggio informativo, ma l'enforcement vero e proprio avviene lato server dentro
+-- user_add_song, quindi si applica immediatamente a TUTTI i client, anche quelli già
+-- connessi da tempo, senza bisogno che nessuno ricarichi la pagina.
+CREATE OR REPLACE FUNCTION admin_set_rate_limit(
+  p_enabled BOOLEAN,
+  p_max_tracks_enabled BOOLEAN DEFAULT FALSE,
+  p_max_tracks INTEGER DEFAULT NULL,
+  p_cooldown_enabled BOOLEAN DEFAULT FALSE,
+  p_cooldown_minutes INTEGER DEFAULT NULL
+)
+RETURNS VOID AS $$
+BEGIN
+  INSERT INTO app_settings (key, value, updated_at)
+  VALUES ('rate_limit', jsonb_build_object(
+    'enabled', p_enabled,
+    'max_active_tracks_enabled', p_max_tracks_enabled,
+    'max_active_tracks', p_max_tracks,
+    'cooldown_minutes_enabled', p_cooldown_enabled,
+    'cooldown_minutes', p_cooldown_minutes
+  ), now())
+  ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now();
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Admin imposta l'algoritmo di priorità Staff (opzionale, tweakable in tempo reale).
+-- Letto live da staff_add_song ad ogni richiesta: si applica subito alla richiesta
+-- successiva di qualunque client Staff già connesso.
+CREATE OR REPLACE FUNCTION admin_set_priority_algorithm(
+  p_enabled BOOLEAN,
+  p_mode TEXT DEFAULT 'block',
+  p_ratio INTEGER DEFAULT 3
+)
+RETURNS VOID AS $$
+BEGIN
+  IF p_mode NOT IN ('block', 'top', 'ratio') THEN
+    RAISE EXCEPTION 'Modalità algoritmo non valida: %', p_mode;
+  END IF;
+
+  INSERT INTO app_settings (key, value, updated_at)
+  VALUES ('priority_algo', jsonb_build_object(
+    'enabled', p_enabled,
+    'mode', p_mode,
+    'ratio', GREATEST(1, COALESCE(p_ratio, 3))
+  ), now())
   ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now();
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;

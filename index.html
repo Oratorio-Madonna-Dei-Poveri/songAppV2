@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MdP SongApp</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=8">
+  <link rel="stylesheet" href="css/style.css?v=10">
 </head>
 <body data-page="user">
   <div class="app-container">
@@ -92,34 +92,14 @@
     </div>
   </div>
 
-  <!-- Credits Modal -->
-  <div id="credits-modal-overlay" class="modal-overlay">
-    <div class="modal credits-modal" style="max-width: 400px; text-align: center;">
-      <div class="modal-header">
-        <h3>✦ Crediti</h3>
-        <button class="modal-close" onclick="closeCreditsModal()">&times;</button>
-      </div>
-      <div class="modal-body" style="padding: 1.2rem 0.5rem;">
-        <div style="font-size: 2.2rem; margin-bottom: 0.75rem;">🎵</div>
-        <p style="font-size: 1.05rem; font-weight: 500; line-height: 1.6; color: rgba(255, 255, 255, 0.9); margin-bottom: 1.2rem;">
-          MdP SongApp è realizzata dagli animatori per l'Oratorio.
-        </p>
-        <div class="credits-product-tag">
-          Un prodotto ✦Sirio
-        </div>
-      </div>
-      <div class="modal-footer" style="justify-content: center;">
-        <button class="btn btn-primary" onclick="closeCreditsModal()">Chiudi</button>
-      </div>
-    </div>
-  </div>
+  <!-- Il modale "Crediti" è iniettato automaticamente da js/realtime.js (componente condiviso) -->
 
   <!-- Scripts -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-  <script src="js/config.js?v=9"></script>
-  <script src="js/supabase-init.js?v=9"></script>
-  <script src="js/realtime.js?v=9"></script>
-  <script src="js/search.js?v=9"></script>
-  <script src="js/user.js?v=9"></script>
+  <script src="js/config.js?v=10"></script>
+  <script src="js/supabase-init.js?v=10"></script>
+  <script src="js/realtime.js?v=10"></script>
+  <script src="js/search.js?v=10"></script>
+  <script src="js/user.js?v=10"></script>
 </body>
 </html>

@@ -7,13 +7,59 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   onPlaylistUpdate = renderPlaylist;
   onBannedUpdate = () => {};
+  onSettingsUpdate = renderRateLimitInfo;
 
   await loadBannedSongs();
+  await loadAppSettings();
   await loadPlaylist();
 
   initRealtime();
   initSearch('search-results', addSongToPlaylist);
+
+  if (appSettings && appSettings.rate_limit) {
+    renderRateLimitInfo(appSettings);
+  }
 });
+
+// --- Banner informativo sul rate limit (se attivato dall'admin) ---
+// Nota: questo banner è solo informativo. Il controllo vero e proprio avviene lato
+// server ad ogni richiesta, quindi resta valido anche se questo client non ha ancora
+// ricevuto l'aggiornamento delle impostazioni via Realtime.
+function renderRateLimitInfo(settings) {
+  const rl = settings?.rate_limit;
+  let banner = document.getElementById('rate-limit-banner');
+
+  const hasActiveLimits = rl && rl.enabled === true &&
+    (rl.max_active_tracks_enabled || rl.cooldown_minutes_enabled);
+
+  if (!hasActiveLimits) {
+    if (banner) banner.style.display = 'none';
+    return;
+  }
+
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'rate-limit-banner';
+    banner.className = 'rate-limit-banner';
+    const searchSection = document.querySelector('.search-section');
+    if (searchSection && searchSection.parentNode) {
+      searchSection.parentNode.insertBefore(banner, searchSection);
+    } else {
+      document.body.insertBefore(banner, document.body.firstChild);
+    }
+  }
+
+  const parts = [];
+  if (rl.max_active_tracks_enabled && rl.max_active_tracks) {
+    parts.push(`massimo ${rl.max_active_tracks} brani attivi in coda contemporaneamente`);
+  }
+  if (rl.cooldown_minutes_enabled && rl.cooldown_minutes) {
+    parts.push(`almeno ${rl.cooldown_minutes} minuti tra una richiesta e l'altra`);
+  }
+
+  banner.textContent = `ℹ️ Limite richieste attivo: ${parts.join(' e ')}.`;
+  banner.style.display = 'block';
+}
 
 // --- Aggiunta brano alla playlist ---
 async function addSongToPlaylist(trackData) {
@@ -30,6 +76,9 @@ async function addSongToPlaylist(trackData) {
     if (error) {
       if (error.message && error.message.includes('bannato')) {
         showToast('Questo brano è stato bannato e non può essere richiesto', 'error');
+      } else if (error.message && (error.message.includes('già') || error.message.includes('attendere'))) {
+        // Messaggio di rate limit generato dal server (limite brani attivi o cooldown)
+        showToast(error.message, 'warning');
       } else {
         showToast('Errore nell\'aggiunta del brano', 'error');
       }
@@ -293,13 +342,6 @@ async function executeDeleteSong() {
   }
 }
 
-// --- Modale Crediti ---
-function openCreditsModal() {
-  const overlay = document.getElementById('credits-modal-overlay');
-  if (overlay) overlay.classList.add('active');
-}
-
-function closeCreditsModal() {
-  const overlay = document.getElementById('credits-modal-overlay');
-  if (overlay) overlay.classList.remove('active');
-}
+// Nota: il modale "Crediti" (apertura/chiusura) è ora un componente condiviso
+// definito una sola volta in js/realtime.js (funzioni openCreditsModal/closeCreditsModal),
+// così viene aggiornato automaticamente su tutte le pagine.

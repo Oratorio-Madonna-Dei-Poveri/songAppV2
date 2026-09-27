@@ -444,13 +444,6 @@ async function executeDeleteStaffSong() {
   }
 }
 
-// --- Modale Crediti ---
-function openCreditsModal() {
-  const overlay = document.getElementById('credits-modal-overlay');
-  if (overlay) overlay.classList.add('active');
-}
-
-function closeCreditsModal() {
-  const overlay = document.getElementById('credits-modal-overlay');
-  if (overlay) overlay.classList.remove('active');
-}
+// Nota: il modale "Crediti" (apertura/chiusura) è ora un componente condiviso
+// definito una sola volta in js/realtime.js (funzioni openCreditsModal/closeCreditsModal),
+// così viene aggiornato automaticamente su tutte le pagine.

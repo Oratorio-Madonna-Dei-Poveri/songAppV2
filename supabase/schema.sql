@@ -61,6 +61,22 @@ INSERT INTO app_settings (key, value)
 VALUES ('staff_page', '{"enabled": true, "disabled_reason": ""}'::jsonb)
 ON CONFLICT (key) DO NOTHING;
 
+-- Rate limit richieste utente (disattivato di default: l'admin lo abilita quando serve)
+INSERT INTO app_settings (key, value)
+VALUES ('rate_limit', '{
+  "enabled": false,
+  "max_active_tracks_enabled": false,
+  "max_active_tracks": 3,
+  "cooldown_minutes_enabled": false,
+  "cooldown_minutes": 15
+}'::jsonb)
+ON CONFLICT (key) DO NOTHING;
+
+-- Algoritmo di priorità Staff (di default replica il comportamento storico "a blocchi")
+INSERT INTO app_settings (key, value)
+VALUES ('priority_algo', '{"enabled": true, "mode": "block", "ratio": 3}'::jsonb)
+ON CONFLICT (key) DO NOTHING;
+
 -- Abilita Realtime sulle tabelle
 ALTER PUBLICATION supabase_realtime ADD TABLE playlist;
 ALTER PUBLICATION supabase_realtime ADD TABLE banned_songs;

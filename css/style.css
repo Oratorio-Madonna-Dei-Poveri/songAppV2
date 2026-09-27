@@ -1300,6 +1300,41 @@ textarea:-webkit-autofill:active{
   letter-spacing: 0.02em;
 }
 
+/* --- Rate limit info banner (pagina utente) --- */
+.rate-limit-banner {
+  background: rgba(139, 92, 246, 0.10);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  border-radius: var(--radius-lg);
+  padding: 10px 16px;
+  margin-bottom: 1.25rem;
+  font-size: 0.82rem;
+  color: rgba(255, 255, 255, 0.85);
+  text-align: center;
+  display: none;
+}
+
+/* --- Admin: Rate Limit & Algoritmo Priorità (riusa lo stile di .admin-staff-control) --- */
+.admin-rate-limit-control,
+.admin-priority-control {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  padding: 16px 20px;
+  margin-bottom: 1.5rem;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.rate-limit-detail,
+.priority-detail {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
 /* --- Played status badge in admin/dj --- */
 .played-indicator {
   display: inline-flex;
