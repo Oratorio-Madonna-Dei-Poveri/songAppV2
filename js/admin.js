@@ -13,7 +13,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const el = document.getElementById('stat-online');
     if (el) el.textContent = count;
   };
-  onSettingsUpdate = updateAdminStaffControls;
+  onSettingsUpdate = updateAllAdminControls;
 
   await loadBannedSongs();
   await loadPlaylist();
@@ -21,9 +21,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   initRealtime();
   initSearch('search-results', addSongAsAdmin);
 
-  if (appSettings && appSettings.staff_page) {
-    updateAdminStaffControls(appSettings);
-  }
+  updateAllAdminControls(appSettings);
 
   // Carica statistiche di vita del DB
   refreshDbVitals();
@@ -332,6 +330,204 @@ async function saveStaffSettings() {
   } catch (err) {
     console.error('Errore impostazione staff:', err);
     showToast('Errore nel salvataggio impostazioni', 'error');
+  }
+}
+
+// --- Aggiorna tutti i pannelli di controllo che dipendono da app_settings ---
+function updateAllAdminControls(settings) {
+  updateAdminStaffControls(settings);
+  updateAdminRateLimitControls(settings);
+  updateAdminPriorityControls(settings);
+}
+
+// --- Gestione Rate Limit Richieste Utenti ---
+function updateAdminRateLimitControls(settings) {
+  const rl = settings?.rate_limit;
+  const statusBadge = document.getElementById('rate-limit-status-badge');
+  const statusText = document.getElementById('rate-limit-status-text');
+  const detail = document.getElementById('rate-limit-detail');
+  if (!statusBadge || !statusText) return;
+
+  const enabled = !!(rl && rl.enabled === true);
+
+  if (enabled) {
+    statusBadge.className = 'staff-control-status active';
+    statusText.textContent = 'Attivo';
+    const parts = [];
+    if (rl.max_active_tracks_enabled && rl.max_active_tracks) {
+      parts.push(`max ${rl.max_active_tracks} brani attivi/persona`);
+    }
+    if (rl.cooldown_minutes_enabled && rl.cooldown_minutes) {
+      parts.push(`attesa min. ${rl.cooldown_minutes} min tra richieste`);
+    }
+    if (detail) {
+      detail.style.display = parts.length ? 'block' : 'none';
+      detail.textContent = parts.join(' • ');
+    }
+  } else {
+    statusBadge.className = 'staff-control-status disabled';
+    statusText.textContent = 'Disattivato';
+    if (detail) { detail.style.display = 'none'; detail.textContent = ''; }
+  }
+}
+
+function openRateLimitModal() {
+  const rl = appSettings?.rate_limit || {};
+  const enabledCb = document.getElementById('rl-enabled-checkbox');
+  const maxCb = document.getElementById('rl-max-tracks-checkbox');
+  const maxVal = document.getElementById('rl-max-tracks-value');
+  const cooldownCb = document.getElementById('rl-cooldown-checkbox');
+  const cooldownVal = document.getElementById('rl-cooldown-value');
+
+  if (enabledCb) enabledCb.checked = !!rl.enabled;
+  if (maxCb) maxCb.checked = !!rl.max_active_tracks_enabled;
+  if (maxVal) maxVal.value = rl.max_active_tracks || 3;
+  if (cooldownCb) cooldownCb.checked = !!rl.cooldown_minutes_enabled;
+  if (cooldownVal) cooldownVal.value = rl.cooldown_minutes || 15;
+
+  const overlay = document.getElementById('rate-limit-modal-overlay');
+  if (overlay) overlay.classList.add('active');
+}
+
+function closeRateLimitModal() {
+  const overlay = document.getElementById('rate-limit-modal-overlay');
+  if (overlay) overlay.classList.remove('active');
+}
+
+async function saveRateLimitSettings() {
+  const enabled = document.getElementById('rl-enabled-checkbox')?.checked || false;
+  const maxEnabled = document.getElementById('rl-max-tracks-checkbox')?.checked || false;
+  const maxValue = parseInt(document.getElementById('rl-max-tracks-value')?.value, 10) || 3;
+  const cooldownEnabled = document.getElementById('rl-cooldown-checkbox')?.checked || false;
+  const cooldownValue = parseInt(document.getElementById('rl-cooldown-value')?.value, 10) || 15;
+
+  try {
+    const { error } = await supabaseClient.rpc('admin_set_rate_limit', {
+      p_enabled: enabled,
+      p_max_tracks_enabled: maxEnabled,
+      p_max_tracks: maxValue,
+      p_cooldown_enabled: cooldownEnabled,
+      p_cooldown_minutes: cooldownValue
+    });
+
+    const newValue = {
+      enabled,
+      max_active_tracks_enabled: maxEnabled,
+      max_active_tracks: maxValue,
+      cooldown_minutes_enabled: cooldownEnabled,
+      cooldown_minutes: cooldownValue
+    };
+
+    if (error) {
+      console.warn('RPC admin_set_rate_limit non disponibile, fallback diretto:', error);
+      const { error: directErr } = await supabaseClient
+        .from('app_settings')
+        .upsert({ key: 'rate_limit', value: newValue, updated_at: new Date().toISOString() });
+      if (directErr) {
+        showToast('Errore nel salvataggio del rate limit', 'error');
+        return;
+      }
+    }
+
+    appSettings.rate_limit = newValue;
+    updateAdminRateLimitControls(appSettings);
+    closeRateLimitModal();
+    showToast(enabled ? 'Rate limit attivato ⏱️' : 'Rate limit disattivato', 'success');
+  } catch (err) {
+    console.error('Errore impostazione rate limit:', err);
+    showToast('Errore nel salvataggio del rate limit', 'error');
+  }
+}
+
+// --- Gestione Algoritmo Priorità Staff ---
+const PRIORITY_MODE_LABELS = {
+  block: 'A blocchi',
+  top: 'Sempre in cima',
+  ratio: 'Rapporto'
+};
+
+function updateAdminPriorityControls(settings) {
+  const pa = settings?.priority_algo;
+  const statusBadge = document.getElementById('priority-status-badge');
+  const statusText = document.getElementById('priority-status-text');
+  const detail = document.getElementById('priority-detail');
+  if (!statusBadge || !statusText) return;
+
+  const enabled = !pa || pa.enabled !== false; // default true per retrocompatibilità
+  const mode = pa?.mode || 'block';
+
+  if (enabled) {
+    statusBadge.className = 'staff-control-status active';
+    statusText.textContent = `${PRIORITY_MODE_LABELS[mode] || mode} (attivo)`;
+    if (detail) {
+      detail.style.display = mode === 'ratio' ? 'block' : 'none';
+      detail.textContent = mode === 'ratio' ? `1 brano staff ogni ${pa?.ratio || 3} pubblici` : '';
+    }
+  } else {
+    statusBadge.className = 'staff-control-status disabled';
+    statusText.textContent = 'Disattivato (FIFO come utenti)';
+    if (detail) { detail.style.display = 'none'; detail.textContent = ''; }
+  }
+}
+
+function onPriorityModeChange() {
+  const mode = document.getElementById('pa-mode-select')?.value;
+  const ratioGroup = document.getElementById('pa-ratio-group');
+  if (ratioGroup) ratioGroup.style.display = mode === 'ratio' ? 'block' : 'none';
+}
+
+function openPriorityModal() {
+  const pa = appSettings?.priority_algo || {};
+  const enabledCb = document.getElementById('pa-enabled-checkbox');
+  const modeSelect = document.getElementById('pa-mode-select');
+  const ratioVal = document.getElementById('pa-ratio-value');
+
+  if (enabledCb) enabledCb.checked = pa.enabled !== false;
+  if (modeSelect) modeSelect.value = pa.mode || 'block';
+  if (ratioVal) ratioVal.value = pa.ratio || 3;
+  onPriorityModeChange();
+
+  const overlay = document.getElementById('priority-modal-overlay');
+  if (overlay) overlay.classList.add('active');
+}
+
+function closePriorityModal() {
+  const overlay = document.getElementById('priority-modal-overlay');
+  if (overlay) overlay.classList.remove('active');
+}
+
+async function savePrioritySettings() {
+  const enabled = document.getElementById('pa-enabled-checkbox')?.checked || false;
+  const mode = document.getElementById('pa-mode-select')?.value || 'block';
+  const ratio = parseInt(document.getElementById('pa-ratio-value')?.value, 10) || 3;
+
+  try {
+    const { error } = await supabaseClient.rpc('admin_set_priority_algorithm', {
+      p_enabled: enabled,
+      p_mode: mode,
+      p_ratio: ratio
+    });
+
+    const newValue = { enabled, mode, ratio };
+
+    if (error) {
+      console.warn('RPC admin_set_priority_algorithm non disponibile, fallback diretto:', error);
+      const { error: directErr } = await supabaseClient
+        .from('app_settings')
+        .upsert({ key: 'priority_algo', value: newValue, updated_at: new Date().toISOString() });
+      if (directErr) {
+        showToast('Errore nel salvataggio dell\'algoritmo', 'error');
+        return;
+      }
+    }
+
+    appSettings.priority_algo = newValue;
+    updateAdminPriorityControls(appSettings);
+    closePriorityModal();
+    showToast('Algoritmo di priorità Staff aggiornato 🎖️', 'success');
+  } catch (err) {
+    console.error('Errore impostazione algoritmo priorità:', err);
+    showToast('Errore nel salvataggio dell\'algoritmo', 'error');
   }
 }
 

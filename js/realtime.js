@@ -41,7 +41,15 @@ function renderStaffBadge(songOrFlag) {
 let currentPlaylist = [];
 let bannedSongs = [];
 let appSettings = {
-  staff_page: { enabled: true, disabled_reason: '' }
+  staff_page: { enabled: true, disabled_reason: '' },
+  rate_limit: {
+    enabled: false,
+    max_active_tracks_enabled: false,
+    max_active_tracks: 3,
+    cooldown_minutes_enabled: false,
+    cooldown_minutes: 15
+  },
+  priority_algo: { enabled: true, mode: 'block', ratio: 3 }
 };
 let isConnected = false;
 
@@ -154,6 +162,70 @@ function initRealtime() {
     });
 }
 
+// --- Ripristino dopo sospensione (schermo spento / app in background) ---
+// Su mobile, quando lo schermo si spegne o il browser va in background, il sistema
+// operativo può sospendere il timer del client Supabase e/o interrompere silenziosamente
+// il websocket senza che venga generato subito un evento di chiusura. Il risultato è che
+// gli aggiornamenti realtime smettono di arrivare finché non si ricarica manualmente la
+// pagina. Per risolvere: ogni volta che la pagina torna visibile/attiva, ricarichiamo
+// sempre i dati da zero (indipendentemente dallo stato apparente del canale) e, se il
+// canale realtime non risulta più "joined", lo ricreiamo da capo.
+let _visibilityResumeInProgress = false;
+
+async function handleVisibilityResume() {
+  if (document.visibilityState !== 'visible') return;
+  if (_visibilityResumeInProgress) return;
+  _visibilityResumeInProgress = true;
+
+  try {
+    // Ricarica sempre i dati correnti: se qualcosa è cambiato mentre eravamo
+    // "addormentati", questo è l'unico modo affidabile per recuperarlo, dato che un
+    // websocket riconnesso riceve solo gli eventi futuri, non quelli persi nel frattempo.
+    await Promise.all([loadPlaylist(), loadBannedSongs(), loadAppSettings()]);
+
+    const playlistState = playlistChannel ? playlistChannel.state : 'closed';
+    const presenceState = presenceChannel ? presenceChannel.state : 'closed';
+
+    if (playlistState !== 'joined' || presenceState !== 'joined') {
+      reconnectRealtime();
+    }
+  } catch (e) {
+    console.warn('Errore nel ripristino dopo sospensione:', e);
+  } finally {
+    _visibilityResumeInProgress = false;
+  }
+}
+
+// Ricrea da zero i canali realtime (usato dopo una sospensione prolungata)
+function reconnectRealtime() {
+  try {
+    if (playlistChannel) supabaseClient.removeChannel(playlistChannel);
+  } catch (e) { /* ignora */ }
+  try {
+    if (presenceChannel) supabaseClient.removeChannel(presenceChannel);
+  } catch (e) { /* ignora */ }
+  playlistChannel = null;
+  presenceChannel = null;
+  initRealtime();
+}
+
+// Eventi che possono segnalare un ritorno in primo piano dopo una sospensione
+document.addEventListener('visibilitychange', handleVisibilityResume);
+window.addEventListener('pageshow', handleVisibilityResume);
+window.addEventListener('focus', handleVisibilityResume);
+window.addEventListener('online', handleVisibilityResume);
+
+// Rete di sicurezza aggiuntiva: mentre la pagina è visibile, controlla periodicamente
+// che il canale sia ancora "joined". Serve a coprire casi limite in cui nessuno degli
+// eventi sopra viene generato dal browser/OS (es. alcuni WebView Android).
+setInterval(() => {
+  if (document.visibilityState !== 'visible') return;
+  const playlistState = playlistChannel ? playlistChannel.state : 'closed';
+  if (playlistState !== 'joined' && playlistState !== 'joining') {
+    handleVisibilityResume();
+  }
+}, 20000);
+
 function handlePlaylistChange(payload) {
   const { eventType, new: newRecord, old: oldRecord } = payload;
   
@@ -245,3 +317,72 @@ function escapeHtml(text) {
   div.textContent = text;
   return div.innerHTML;
 }
+
+// =============================================
+// Componente "Crediti" (condiviso da tutte le pagine)
+// =============================================
+// Unica fonte di verità per il popup dei crediti: modificando questo blocco
+// il contenuto cambia automaticamente su index.html, staff.html, dj.html e admin.html,
+// senza dover tenere sincronizzate 4 copie identiche di HTML.
+const CREDITS_MODAL_ID = 'credits-modal-overlay';
+
+function ensureCreditsModal() {
+  if (document.getElementById(CREDITS_MODAL_ID)) return;
+  const wrapper = document.createElement('div');
+  wrapper.innerHTML = `
+    <div id="${CREDITS_MODAL_ID}" class="modal-overlay">
+      <div class="modal credits-modal" style="max-width: 400px; text-align: center;">
+        <div class="modal-header">
+          <h3>✦ Crediti</h3>
+          <button class="modal-close" onclick="closeCreditsModal()">&times;</button>
+        </div>
+        <div class="modal-body" style="padding: 1.2rem 0.5rem;">
+          <div style="font-size: 2.2rem; margin-bottom: 0.75rem;">🎵</div>
+          <p style="font-size: 1.05rem; font-weight: 500; line-height: 1.6; color: rgba(255, 255, 255, 0.9); margin-bottom: 1.2rem;">
+            MdP SongApp è realizzata dagli animatori per l'Oratorio.
+          </p>
+          <div class="credits-product-tag">
+            Un prodotto ✦Sirio
+          </div>
+        </div>
+        <div class="modal-footer" style="justify-content: center;">
+          <button class="btn btn-primary" onclick="closeCreditsModal()">Chiudi</button>
+        </div>
+      </div>
+    </div>
+  `.trim();
+  document.body.appendChild(wrapper.firstElementChild);
+}
+
+function openCreditsModal() {
+  ensureCreditsModal();
+  const overlay = document.getElementById(CREDITS_MODAL_ID);
+  if (overlay) overlay.classList.add('active');
+}
+
+function closeCreditsModal() {
+  const overlay = document.getElementById(CREDITS_MODAL_ID);
+  if (overlay) overlay.classList.remove('active');
+}
+
+// Se la pagina ha già un footer ma nessun link "Crediti" (es. dj.html, admin.html),
+// lo aggiunge automaticamente così resta presente ovunque senza doverlo duplicare.
+function ensureCreditsFooterLink() {
+  if (document.querySelector('.credits-trigger')) return;
+  const footerContent = document.querySelector('.app-footer .footer-content');
+  if (!footerContent) return;
+
+  const divider = document.createElement('span');
+  divider.className = 'footer-divider';
+  divider.textContent = '•';
+
+  const btn = document.createElement('button');
+  btn.className = 'credits-trigger';
+  btn.textContent = 'Crediti';
+  btn.onclick = openCreditsModal;
+
+  footerContent.appendChild(divider);
+  footerContent.appendChild(btn);
+}
+
+document.addEventListener('DOMContentLoaded', ensureCreditsFooterLink);

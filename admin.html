@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MdP SongApp — Admin</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=9">
+  <link rel="stylesheet" href="css/style.css?v=10">
 </head>
 <body data-page="admin">
   <div class="app-container">
@@ -55,6 +55,38 @@
       <div class="staff-control-actions">
         <button class="btn btn-warning btn-sm" onclick="openStaffSettingsModal()">
           ⚙️ Gestisci Portale Staff
+        </button>
+      </div>
+    </div>
+
+    <!-- Rate Limit Control Card -->
+    <div class="admin-rate-limit-control">
+      <div class="staff-control-info">
+        <div class="staff-control-title">⏱️ Rate Limit Richieste Utenti</div>
+        <div class="staff-control-status disabled" id="rate-limit-status-badge">
+          <span class="status-dot"></span> <span id="rate-limit-status-text">Disattivato</span>
+        </div>
+        <div class="rate-limit-detail" id="rate-limit-detail" style="display: none;"></div>
+      </div>
+      <div class="staff-control-actions">
+        <button class="btn btn-warning btn-sm" onclick="openRateLimitModal()">
+          ⚙️ Configura Rate Limit
+        </button>
+      </div>
+    </div>
+
+    <!-- Staff Priority Algorithm Control Card -->
+    <div class="admin-priority-control">
+      <div class="staff-control-info">
+        <div class="staff-control-title">🎖️ Algoritmo Priorità Staff</div>
+        <div class="staff-control-status active" id="priority-status-badge">
+          <span class="status-dot"></span> <span id="priority-status-text">A blocchi (default)</span>
+        </div>
+        <div class="priority-detail" id="priority-detail" style="display: none;"></div>
+      </div>
+      <div class="staff-control-actions">
+        <button class="btn btn-warning btn-sm" onclick="openPriorityModal()">
+          ⚙️ Configura Algoritmo
         </button>
       </div>
     </div>
@@ -142,6 +174,13 @@
         <span>Suonati: <strong id="vital-played-songs">0</strong> (<span id="vital-played-pct">0%</span>)</span>
       </div>
     </section>
+
+    <!-- Footer (il link "Crediti" viene aggiunto automaticamente da js/realtime.js) -->
+    <footer class="app-footer">
+      <div class="footer-content">
+        <span>© 2026 Oratorio Madonna dei Poveri. Tutti i diritti riservati.</span>
+      </div>
+    </footer>
   </div>
 
   <!-- Edit Modal (Deezer Search) -->
@@ -250,12 +289,103 @@
     </div>
   </div>
 
+  <!-- Rate Limit Settings Modal -->
+  <div id="rate-limit-modal-overlay" class="modal-overlay">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>⏱️ Configura Rate Limit Richieste</h3>
+        <button class="modal-close" onclick="closeRateLimitModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem;">
+          <label for="rl-enabled-checkbox" style="margin-bottom:0;font-weight:600;font-size:0.95rem;">
+            Attiva rate limit per gli utenti:
+          </label>
+          <input type="checkbox" id="rl-enabled-checkbox" style="width: 20px; height: 20px; accent-color: var(--primary); cursor: pointer;">
+        </div>
+
+        <div class="form-group" style="display: flex; align-items: center; justify-content: space-between;">
+          <label for="rl-max-tracks-checkbox" style="margin-bottom:0;font-weight:500;">
+            Limita numero di brani attivi per persona:
+          </label>
+          <input type="checkbox" id="rl-max-tracks-checkbox" style="width: 18px; height: 18px; accent-color: var(--primary); cursor: pointer;">
+        </div>
+        <div class="form-group">
+          <label for="rl-max-tracks-value">Numero massimo di brani in coda contemporaneamente (es. 2-3):</label>
+          <input type="number" id="rl-max-tracks-value" min="1" step="1" value="3">
+        </div>
+
+        <div class="form-group" style="display: flex; align-items: center; justify-content: space-between;">
+          <label for="rl-cooldown-checkbox" style="margin-bottom:0;font-weight:500;">
+            Richiedi un'attesa minima tra una richiesta e l'altra:
+          </label>
+          <input type="checkbox" id="rl-cooldown-checkbox" style="width: 18px; height: 18px; accent-color: var(--primary); cursor: pointer;">
+        </div>
+        <div class="form-group">
+          <label for="rl-cooldown-value">Minuti di attesa minimi tra due richieste (es. 15-20):</label>
+          <input type="number" id="rl-cooldown-value" min="1" step="1" value="15">
+        </div>
+
+        <p style="font-size:0.78rem;color:var(--text-muted);margin-top:0.5rem;">
+          Le modifiche non sono retroattive (non toccano i brani già in coda) e si applicano
+          immediatamente, anche agli utenti già connessi, dalla richiesta successiva.
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeRateLimitModal()">Annulla</button>
+        <button class="btn btn-primary" onclick="saveRateLimitSettings()">💾 Salva Impostazioni</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Staff Priority Algorithm Settings Modal -->
+  <div id="priority-modal-overlay" class="modal-overlay">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>🎖️ Configura Algoritmo Priorità Staff</h3>
+        <button class="modal-close" onclick="closePriorityModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem;">
+          <label for="pa-enabled-checkbox" style="margin-bottom:0;font-weight:600;font-size:0.95rem;">
+            Attiva priorità per i brani dello Staff:
+          </label>
+          <input type="checkbox" id="pa-enabled-checkbox" style="width: 20px; height: 20px; accent-color: var(--primary); cursor: pointer;">
+        </div>
+
+        <div class="form-group">
+          <label for="pa-mode-select">Algoritmo (attivo solo se la priorità è abilitata sopra):</label>
+          <select id="pa-mode-select" onchange="onPriorityModeChange()" style="width:100%;padding:10px 12px;border-radius:var(--radius-lg);background:var(--surface-2, #1a1a1a);color:var(--text-primary);border:1px solid var(--border);">
+            <option value="block">A blocchi — sotto il primo blocco staff già in cima (default)</option>
+            <option value="top">Sempre in cima — priorità massima, va sempre per primo</option>
+            <option value="ratio">Rapporto — 1 brano staff ogni N brani pubblici</option>
+          </select>
+        </div>
+
+        <div class="form-group" id="pa-ratio-group" style="display:none;">
+          <label for="pa-ratio-value">Ogni quanti brani pubblici inserire un brano staff (N):</label>
+          <input type="number" id="pa-ratio-value" min="1" step="1" value="3">
+        </div>
+
+        <p style="font-size:0.78rem;color:var(--text-muted);margin-top:0.5rem;">
+          Se disattivata, i brani Staff vengono semplicemente accodati come una richiesta
+          normale (restano comunque etichettati "Staff"). Le modifiche si applicano
+          immediatamente alla richiesta successiva di qualsiasi membro dello staff già connesso.
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closePriorityModal()">Annulla</button>
+        <button class="btn btn-primary" onclick="savePrioritySettings()">💾 Salva Impostazioni</button>
+      </div>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
-  <script src="js/config.js?v=9"></script>
-  <script src="js/supabase-init.js?v=9"></script>
-  <script src="js/realtime.js?v=9"></script>
-  <script src="js/search.js?v=9"></script>
-  <script src="js/admin.js?v=9"></script>
+  <script src="js/config.js?v=10"></script>
+  <script src="js/supabase-init.js?v=10"></script>
+  <script src="js/realtime.js?v=10"></script>
+  <script src="js/search.js?v=10"></script>
+  <script src="js/admin.js?v=10"></script>
 </body>
 </html>
