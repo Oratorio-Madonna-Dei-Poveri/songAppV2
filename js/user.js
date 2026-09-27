@@ -178,7 +178,7 @@ async function performEditSearch(query) {
              title="${banned ? 'Brano bannato' : 'Clicca per sostituire'}">
           ${coverUrl 
             ? `<img src="${coverUrl}" alt="" loading="lazy">` 
-            : `<div class="song-artwork-fallback" style="width:48px;height:48px">${ICONS.music}</div>`
+            : `<div class="song-artwork-fallback">${ICONS.music}</div>`
           }
           <div class="result-info">
             <div class="result-title">${escapeHtml(track.title)}</div>

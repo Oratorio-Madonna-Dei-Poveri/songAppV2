@@ -93,7 +93,7 @@ function renderAdminPlaylist(playlist) {
         <div class="song-info">
           <div class="song-title">
             ${escapeHtml(song.title)}
-            ${renderStaffBadge(song.is_staff)}
+            ${renderStaffBadge(song)}
             ${isPlayed ? '<span class="played-indicator">✓ Suonato</span>' : ''}
           </div>
           <div class="song-artist">${escapeHtml(song.artist)}</div>
@@ -190,7 +190,7 @@ function openNotesModal(songId) {
 
   if (songIdInput) songIdInput.value = songId;
   if (displayEl) {
-    displayEl.textContent = `${song.title} — ${song.artist}${song.is_staff ? ' (Staff)' : ''}`;
+    displayEl.textContent = `${song.title} — ${song.artist}${isStaffSong(song) ? ' (Staff)' : ''}`;
   }
   if (textarea) {
     textarea.value = song.notes || '';
@@ -415,7 +415,7 @@ async function performAdminEditSearch(query) {
              title="Clicca per sostituire con questo brano">
           ${coverUrl 
             ? `<img src="${coverUrl}" alt="" loading="lazy">` 
-            : `<div class="song-artwork-fallback" style="width:48px;height:48px">${ICONS.music}</div>`
+            : `<div class="song-artwork-fallback">${ICONS.music}</div>`
           }
           <div class="result-info">
             <div class="result-title">${escapeHtml(track.title)}</div>
@@ -558,7 +558,7 @@ function exportCSV() {
     `"${(song.genre || '').replace(/"/g, '""')}"`,
     `"${new Date(song.created_at).toLocaleString('it-IT')}"`,
     song.played_at ? '"Suonato"' : '"In attesa"',
-    song.is_staff ? '"Staff"' : '"Pubblico"',
+    isStaffSong(song) ? '"Staff"' : '"Pubblico"',
     `"${(song.notes || '').replace(/"/g, '""')}"`
   ]);
 
@@ -690,7 +690,7 @@ async function refreshDbVitals() {
 
   // 2. Calcolo metriche da dati attuali
   const totalInDb = currentPlaylist.length;
-  const staffSongsCount = currentPlaylist.filter(s => s.is_staff).length;
+  const staffSongsCount = currentPlaylist.filter(s => isStaffSong(s)).length;
   const publicSongsCount = totalInDb - staffSongsCount;
   const playedSongsCount = currentPlaylist.filter(s => s.played_at).length;
   const playedPct = totalInDb > 0 ? Math.round((playedSongsCount / totalInDb) * 100) : 0;
