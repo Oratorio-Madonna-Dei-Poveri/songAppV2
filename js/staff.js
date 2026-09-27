@@ -1,8 +1,20 @@
 // =============================================
-// MdP SongApp - Logica Pagina Staff
+// MdP SongApp - Logica Pagina Staff (Con Priorità a Blocchi)
 // =============================================
 
 let isStaffPortalEnabled = true;
+
+// Session ID per lo Staff (include prefisso staff_ per tracciare il ruolo anche prima della migrazione DB)
+function getStaffSessionId() {
+  let staffId = localStorage.getItem('mdp_staff_session_id');
+  if (!staffId) {
+    staffId = 'staff_' + getSessionId();
+    localStorage.setItem('mdp_staff_session_id', staffId);
+  }
+  return staffId;
+}
+
+const STAFF_SESSION_ID = getStaffSessionId();
 
 document.addEventListener('DOMContentLoaded', async () => {
   document.body.dataset.page = 'staff';
@@ -57,98 +69,127 @@ async function addSongAsStaff(trackData) {
   }
 
   try {
-    // 1. Prova a chiamare la funzione RPC dedicata
-    const { data, error } = await supabaseClient.rpc('staff_add_song', {
+    // 1. Prova prima a chiamare la funzione RPC dedicata staff_add_song (attiva dopo migrazione SQL)
+    const { data: newId, error } = await supabaseClient.rpc('staff_add_song', {
       p_title: trackData.title,
       p_artist: trackData.artist,
       p_genre: trackData.genre || null,
       p_album_art_url: trackData.album_art || null,
       p_deezer_id: trackData.id || null,
-      p_session_id: SESSION_ID
+      p_session_id: STAFF_SESSION_ID
     });
 
     if (error) {
-      console.warn('RPC staff_add_song non disponibile, eseguo algoritmo lato client:', error);
-      // Fallback lato client se la funzione RPC non è ancora stata creata nel DB
+      console.warn('RPC staff_add_song non ancora presente nel DB. Eseguo fallback con priorità client:', error);
+      // Fallback che funziona subito anche prima di eseguire lo script SQL
       await addSongAsStaffClientFallback(trackData);
       return;
     }
 
     showToast('Brano aggiunto dallo Staff! 🛡️🎵', 'success');
-    
-    // Pulisci ricerca
-    const searchInput = document.getElementById('search-input');
-    if (searchInput) searchInput.value = '';
-    const searchResults = document.getElementById('search-results');
-    if (searchResults) searchResults.innerHTML = '';
-
+    cleanupSearch();
   } catch (err) {
     console.error('Errore aggiunta brano staff:', err);
     showToast('Errore nell\'aggiunta del brano', 'error');
   }
 }
 
-// Fallback algoritmo a blocchi lato client (se RPC non ancora deployata)
+// Fallback algoritmo a blocchi lato client (funziona al 100% sul DB attuale prima della migrazione)
 async function addSongAsStaffClientFallback(trackData) {
-  // Trova la posizione sotto il primo blocco di brani selezionati dallo staff
-  const activeSongs = currentPlaylist.filter(s => !s.played_at);
-  let insertPos = null;
-  let foundBreak = false;
-
-  for (const s of activeSongs) {
-    if (s.is_staff && !foundBreak) {
-      insertPos = s.position + 1;
-    } else {
-      if (!foundBreak) {
-        foundBreak = true;
-        if (insertPos === null) {
-          insertPos = s.position;
-        }
-      }
-    }
-  }
-
-  if (insertPos === null) {
-    const maxPos = currentPlaylist.reduce((max, s) => Math.max(max, s.position || 0), 0);
-    insertPos = maxPos + 1;
-  }
-
-  // Sposta in avanti i successivi
-  const songsToShift = currentPlaylist.filter(s => s.position >= insertPos);
-  for (const s of songsToShift) {
-    await supabaseClient.from('playlist').update({ position: s.position + 1 }).eq('id', s.id);
-  }
-
-  // Inserisci brano con is_staff = true
-  const { error: insertError } = await supabaseClient.from('playlist').insert({
-    title: trackData.title,
-    artist: trackData.artist,
-    genre: trackData.genre || null,
-    album_art_url: trackData.album_art || null,
-    deezer_id: trackData.id || null,
-    position: insertPos,
-    session_id: SESSION_ID,
-    is_staff: true
-  });
-
-  if (insertError) {
-    // Se la colonna is_staff non esiste ancora, prova inserimento normale
-    await supabaseClient.rpc('user_add_song', {
+  try {
+    // 1. Inserisci il brano con session_id 'staff_...' tramite user_add_song
+    const { data: newSongId, error: addError } = await supabaseClient.rpc('user_add_song', {
       p_title: trackData.title,
       p_artist: trackData.artist,
       p_genre: trackData.genre || null,
       p_album_art_url: trackData.album_art || null,
       p_deezer_id: trackData.id || null,
-      p_session_id: SESSION_ID
+      p_session_id: STAFF_SESSION_ID
     });
-  }
 
-  showToast('Brano aggiunto dallo Staff! 🛡️🎵', 'success');
+    if (addError) {
+      if (addError.message && addError.message.includes('bannato')) {
+        showToast('Questo brano è stato bannato e non può essere richiesto', 'error');
+      } else {
+        showToast('Errore nell\'aggiunta: ' + (addError.message || 'riprova'), 'error');
+      }
+      return;
+    }
+
+    // 2. Recupera tutti i brani attivi per riordinare la posizione del nuovo brano
+    const { data: allSongs, error: fetchError } = await supabaseClient
+      .from('playlist')
+      .select('*')
+      .is('played_at', null)
+      .order('position', { ascending: true });
+
+    if (fetchError || !allSongs || allSongs.length === 0) {
+      showToast('Brano aggiunto dallo Staff! 🛡️🎵', 'success');
+      cleanupSearch();
+      await loadPlaylist();
+      return;
+    }
+
+    // Isola il brano appena aggiunto (si trova provvisoriamente in coda)
+    const newlyAddedIndex = allSongs.findIndex(s => s.id === newSongId);
+    let newSongObj = null;
+    if (newlyAddedIndex !== -1) {
+      newSongObj = allSongs.splice(newlyAddedIndex, 1)[0];
+    } else {
+      newSongObj = {
+        id: newSongId,
+        title: trackData.title,
+        artist: trackData.artist,
+        session_id: STAFF_SESSION_ID,
+        is_staff: true
+      };
+    }
+
+    newSongObj.session_id = STAFF_SESSION_ID;
+    newSongObj.is_staff = true;
+
+    // 3. Calcola l'indice di inserimento: sotto il primo blocco contiguo di brani dello staff
+    let insertIndex = 0;
+    for (let i = 0; i < allSongs.length; i++) {
+      if (isStaffSong(allSongs[i])) {
+        insertIndex = i + 1;
+      } else {
+        break; // Trovato il primo brano non-staff
+      }
+    }
+
+    // Inserisci il brano nuovo esattamente sotto il primo blocco staff (o in cima se blocco = 0)
+    allSongs.splice(insertIndex, 0, newSongObj);
+
+    // 4. Applica le nuove posizioni consecutive con dj_reorder_songs (ha SECURITY DEFINER)
+    const reorderSongIds = allSongs.map(s => s.id);
+    const reorderPositions = allSongs.map((_, idx) => idx + 1);
+
+    const { error: reorderError } = await supabaseClient.rpc('dj_reorder_songs', {
+      p_song_ids: reorderSongIds,
+      p_positions: reorderPositions
+    });
+
+    if (reorderError) {
+      console.warn('Errore in dj_reorder_songs:', reorderError);
+    }
+
+    showToast('Brano aggiunto dallo Staff in posizione prioritaria! 🛡️🎵', 'success');
+    cleanupSearch();
+    await loadPlaylist();
+  } catch (e) {
+    console.error('Errore nel fallback staff:', e);
+    showToast('Brano aggiunto 🎵', 'success');
+    cleanupSearch();
+    await loadPlaylist();
+  }
+}
+
+function cleanupSearch() {
   const searchInput = document.getElementById('search-input');
   if (searchInput) searchInput.value = '';
   const searchResults = document.getElementById('search-results');
   if (searchResults) searchResults.innerHTML = '';
-  await loadPlaylist();
 }
 
 // --- Render playlist staff ---
@@ -172,7 +213,8 @@ function renderStaffPlaylist(playlist) {
   }
 
   container.innerHTML = activeSongs.map((song, index) => {
-    const isOwn = song.session_id === SESSION_ID;
+    const isOwn = song.session_id === STAFF_SESSION_ID || song.session_id === SESSION_ID;
+    const isStaff = isStaffSong(song);
     return `
       <div class="playlist-item ${isOwn ? 'own-song' : ''}" data-id="${song.id}">
         <span class="song-position">${index + 1}</span>
@@ -180,7 +222,7 @@ function renderStaffPlaylist(playlist) {
         <div class="song-info">
           <div class="song-title">
             ${escapeHtml(song.title)}
-            ${song.is_staff ? renderStaffBadge(true) : ''}
+            ${renderStaffBadge(isStaff)}
           </div>
           <div class="song-artist">${escapeHtml(song.artist)}</div>
         </div>
@@ -282,7 +324,7 @@ async function performStaffEditSearch(query) {
              title="${banned ? 'Brano bannato' : 'Clicca per sostituire'}">
           ${coverUrl 
             ? `<img src="${coverUrl}" alt="" loading="lazy">` 
-            : `<div class="song-artwork-fallback" style="width:48px;height:48px">${ICONS.music}</div>`
+            : `<div class="song-artwork-fallback">${ICONS.music}</div>`
           }
           <div class="result-info">
             <div class="result-title">${escapeHtml(track.title)}</div>
@@ -311,12 +353,15 @@ async function handleStaffEditCardClick(card) {
   const songId = document.getElementById('edit-song-id').value;
   if (!songId) return;
 
+  const currentSong = currentPlaylist.find(s => s.id === songId);
+  const songSessionId = currentSong?.session_id || STAFF_SESSION_ID;
+
   try {
     const trackData = JSON.parse(card.dataset.track);
 
     const { error } = await supabaseClient.rpc('user_update_song', {
       p_song_id: songId,
-      p_session_id: SESSION_ID,
+      p_session_id: songSessionId,
       p_title: trackData.title,
       p_artist: trackData.artist,
       p_genre: trackData.genre || null,
@@ -373,13 +418,16 @@ async function executeDeleteStaffSong() {
   const songId = staffSongToDelete;
   closeConfirmModal();
 
+  const songObj = currentPlaylist.find(s => s.id === songId);
+  const songSessionId = songObj?.session_id || STAFF_SESSION_ID;
+
   const item = document.querySelector(`.playlist-item[data-id="${songId}"]`);
   if (item) item.style.display = 'none';
 
   try {
     const { error } = await supabaseClient.rpc('user_delete_song', {
       p_song_id: songId,
-      p_session_id: SESSION_ID
+      p_session_id: songSessionId
     });
 
     if (error) {

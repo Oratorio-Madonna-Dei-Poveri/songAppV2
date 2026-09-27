@@ -44,7 +44,7 @@ function renderDJPlaylist(playlist) {
       <div class="song-info">
         <div class="song-title">
           ${escapeHtml(song.title)}
-          ${renderStaffBadge(song.is_staff)}
+          ${renderStaffBadge(song)}
         </div>
         <div class="song-artist">${escapeHtml(song.artist)}</div>
       </div>

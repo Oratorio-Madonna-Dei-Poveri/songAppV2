@@ -22,8 +22,17 @@ function renderSongArtwork(albumArtUrl) {
   return `<div class="song-artwork song-artwork-fallback" title="Nessuna copertina">${ICONS.music}</div>`;
 }
 
+// Helper per identificare se un brano è dello staff (supporta sia is_staff da migration sia session_id staff_)
+function isStaffSong(song) {
+  if (!song) return false;
+  if (song.is_staff === true || song.is_staff === 'true') return true;
+  if (song.session_id && String(song.session_id).startsWith('staff_')) return true;
+  return false;
+}
+
 // Helper indicatore Staff (per DJ e Admin)
-function renderStaffBadge(isStaff) {
+function renderStaffBadge(songOrFlag) {
+  const isStaff = typeof songOrFlag === 'object' ? isStaffSong(songOrFlag) : !!songOrFlag;
   if (!isStaff) return '';
   return `<span class="badge-staff" title="Richiesto dallo Staff">${ICONS.staff} Staff</span>`;
 }
