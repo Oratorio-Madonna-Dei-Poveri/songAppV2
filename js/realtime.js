@@ -409,10 +409,10 @@ function ensureCreditsModal() {
             Codice: Daniele P. <br> Beta Test: Simone B., Francesco R. <br> Idea di: Francesco R.
           </p>
           <p style="font-size: 1.05rem; font-weight: 500; line-height: 1.6; color: rgba(255, 255, 255, 0.9); margin-bottom: 1.2rem;">
-            Realizzato con l'ausilio di strumenti di Intelligenza Artificiale (come indicato dal Reg. UE 2024/1689 "AI Act", Art. 50, Comma 7). Nessun dato personale viene preso/utilizzato durante l'utilizzo.
+            Realizzato con l'ausilio di strumenti di Intelligenza Artificiale <span style="font-size: 0.75rem; font-weight: 500; line-height: 1.6; color: rgba(255, 255, 255, 0.75); margin-bottom: 1.2rem;">(come indicato dal Reg. UE 2024/1689 "AI Act", Art. 50, Comma 7)</span>. Nessun dato personale viene raccolto durante l'utilizzo.
           </p>
           <p style="font-size: 0.75rem; font-weight: 500; line-height: 1.6; color: rgba(255, 255, 255, 0.75); margin-bottom: 1.2rem;">
-            © 2026 Oratorio Madonna dei Poveri. Tutti i diritti riservati.
+            SongApp v1.2.2 - © 2026 Oratorio Madonna dei Poveri. Tutti i diritti riservati.
           </p>
           <!-- <div class="credits-product-tag">
             Un prodotto ✦Sirio
